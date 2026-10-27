@@ -1,0 +1,1892 @@
+{
+ "goose2adorn": {
+  "1001": {
+   "gooseId": 1001,
+   "gooseName": "",
+   "gooseIcon": "goose_1",
+   "adornIds": [
+    100110
+   ]
+  },
+  "1002": {
+   "gooseId": 1002,
+   "gooseName": "",
+   "gooseIcon": "goose_2",
+   "adornIds": [
+    105,
+    106,
+    108,
+    204,
+    207,
+    303,
+    309,
+    310,
+    404,
+    405,
+    409,
+    501,
+    505,
+    507,
+    603,
+    607,
+    609,
+    100102,
+    100109,
+    100113,
+    100115,
+    100317,
+    100408,
+    100409,
+    100412,
+    100416,
+    100417,
+    100509,
+    100512,
+    100515,
+    100518,
+    100602,
+    100613,
+    100703,
+    100707,
+    100716,
+    100817,
+    100818,
+    100902,
+    100908,
+    100911,
+    100915,
+    100919,
+    101003,
+    101005,
+    101007,
+    101010,
+    101013,
+    101014,
+    101106,
+    101113,
+    101207,
+    101211,
+    101215,
+    101216,
+    101221,
+    101222,
+    101305,
+    101308,
+    101320,
+    101324,
+    101407,
+    101415,
+    101421,
+    101505,
+    101620,
+    101621,
+    101625
+   ]
+  },
+  "1003": {
+   "gooseId": 1003,
+   "gooseName": "",
+   "gooseIcon": "goose_3",
+   "adornIds": [
+    208,
+    210,
+    402,
+    407,
+    501,
+    505,
+    509,
+    100010,
+    100308,
+    100402,
+    100403,
+    100405,
+    100410,
+    100414,
+    100511,
+    100605,
+    100707,
+    100811,
+    100915,
+    101114,
+    101211,
+    101222,
+    101310,
+    101319,
+    101408,
+    101509,
+    101514
+   ]
+  },
+  "1004": {
+   "gooseId": 1004,
+   "gooseName": "",
+   "gooseIcon": "goose_4",
+   "adornIds": [
+    108,
+    201,
+    606,
+    100109,
+    100113,
+    100115,
+    100307,
+    100308,
+    100513,
+    100608,
+    100609,
+    100705,
+    100802,
+    100816,
+    100819,
+    101112,
+    101118,
+    101313
+   ]
+  },
+  "1005": {
+   "gooseId": 1005,
+   "gooseName": "",
+   "gooseIcon": "goose_5",
+   "adornIds": [
+    110,
+    202,
+    206,
+    310,
+    510,
+    100322,
+    100919,
+    101002,
+    101004,
+    101106,
+    101309,
+    101512
+   ]
+  },
+  "1006": {
+   "gooseId": 1006,
+   "gooseName": "",
+   "gooseIcon": "goose_6",
+   "adornIds": [
+    204,
+    410,
+    602,
+    100006,
+    100011,
+    100314,
+    100321,
+    100709,
+    101215,
+    101218,
+    101319
+   ]
+  },
+  "1007": {
+   "gooseId": 1007,
+   "gooseName": "",
+   "gooseIcon": "goose_7",
+   "adornIds": [
+    107,
+    201,
+    206,
+    305,
+    502,
+    100004,
+    100007,
+    100105,
+    100118,
+    100304,
+    100305,
+    100516,
+    100518,
+    100604,
+    100807,
+    101008,
+    101015,
+    101207,
+    101405
+   ]
+  },
+  "1008": {
+   "gooseId": 1008,
+   "gooseName": "",
+   "gooseIcon": "goose_8",
+   "adornIds": [
+    103,
+    207,
+    301,
+    100004,
+    100009,
+    100306,
+    100307,
+    100316,
+    100419,
+    101321,
+    101510
+   ]
+  },
+  "1009": {
+   "gooseId": 1009,
+   "gooseName": "",
+   "gooseIcon": "goose_9",
+   "adornIds": [
+    106,
+    204,
+    308,
+    506,
+    100102,
+    100320,
+    100907,
+    100910
+   ]
+  },
+  "1010": {
+   "gooseId": 1010,
+   "gooseName": "",
+   "gooseIcon": "goose_11",
+   "adornIds": [
+    204,
+    304,
+    408,
+    601,
+    100310,
+    100313,
+    100319,
+    100507,
+    100514,
+    100607,
+    100704,
+    100805,
+    101110
+   ]
+  },
+  "1011": {
+   "gooseId": 1011,
+   "gooseName": "",
+   "gooseIcon": "goose_10",
+   "adornIds": [
+    207,
+    302,
+    100415,
+    100510,
+    100517,
+    100606
+   ]
+  },
+  "1012": {
+   "gooseId": 1012,
+   "gooseName": "",
+   "gooseIcon": "goose_12",
+   "adornIds": [
+    303,
+    100610
+   ]
+  },
+  "1013": {
+   "gooseId": 1013,
+   "gooseName": "",
+   "gooseIcon": "goose_13",
+   "adornIds": [
+    306,
+    403,
+    507,
+    100502,
+    100616,
+    100806,
+    100808,
+    100812,
+    100918,
+    101406
+   ]
+  },
+  "1014": {
+   "gooseId": 1014,
+   "gooseName": "",
+   "gooseIcon": "goose_14",
+   "adornIds": [
+    401,
+    100703,
+    100809,
+    101503
+   ]
+  },
+  "1015": {
+   "gooseId": 1015,
+   "gooseName": "",
+   "gooseIcon": "goose_15",
+   "adornIds": [
+    406,
+    504,
+    100803,
+    100905,
+    101006,
+    101420
+   ]
+  },
+  "1016": {
+   "gooseId": 1016,
+   "gooseName": "",
+   "gooseIcon": "goose_16",
+   "adornIds": [
+    100909,
+    100914,
+    101015,
+    101103,
+    101513
+   ]
+  },
+  "1017": {
+   "gooseId": 1017,
+   "gooseName": "",
+   "gooseIcon": "goose_17",
+   "adornIds": [
+    503,
+    508,
+    100906,
+    101007,
+    101109,
+    101306
+   ]
+  },
+  "1018": {
+   "gooseId": 1018,
+   "gooseName": "",
+   "gooseIcon": "goose_18",
+   "adornIds": [
+    603,
+    101211,
+    101304
+   ]
+  },
+  "1019": {
+   "gooseId": 1019,
+   "gooseName": "",
+   "gooseIcon": "goose_19",
+   "adornIds": [
+    607,
+    608,
+    101106,
+    101411,
+    101627
+   ]
+  },
+  "1020": {
+   "gooseId": 1020,
+   "gooseName": "",
+   "gooseIcon": "goose_20",
+   "adornIds": [
+    703,
+    101315,
+    101324
+   ]
+  },
+  "1021": {
+   "gooseId": 1021,
+   "gooseName": "",
+   "gooseIcon": "goose_21",
+   "adornIds": [
+    101412,
+    101613
+   ]
+  },
+  "1022": {
+   "gooseId": 1022,
+   "gooseName": "",
+   "gooseIcon": "goose_22",
+   "adornIds": [
+    803,
+    101508
+   ]
+  },
+  "1023": {
+   "gooseId": 1023,
+   "gooseName": "",
+   "gooseIcon": "goose_23",
+   "adornIds": [
+    807,
+    101624
+   ]
+  }
+ },
+ "adorn2goose": {
+  "103": {
+   "adornId": 103,
+   "adornName": "贩卖机",
+   "gooseIds": [
+    1008
+   ]
+  },
+  "105": {
+   "adornId": 105,
+   "adornName": "外卖车",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "106": {
+   "adornId": 106,
+   "adornName": "垃圾桶",
+   "gooseIds": [
+    1002,
+    1009
+   ]
+  },
+  "107": {
+   "adornId": 107,
+   "adornName": "路边摊",
+   "gooseIds": [
+    1007
+   ]
+  },
+  "108": {
+   "adornId": 108,
+   "adornName": "烧烤桌",
+   "gooseIds": [
+    1002,
+    1004
+   ]
+  },
+  "110": {
+   "adornId": 110,
+   "adornName": "喷泉",
+   "gooseIds": [
+    1005
+   ]
+  },
+  "201": {
+   "adornId": 201,
+   "adornName": "0",
+   "gooseIds": [
+    1004,
+    1007
+   ]
+  },
+  "202": {
+   "adornId": 202,
+   "adornName": "0",
+   "gooseIds": [
+    1005
+   ]
+  },
+  "204": {
+   "adornId": 204,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1006,
+    1009,
+    1010
+   ]
+  },
+  "206": {
+   "adornId": 206,
+   "adornName": "0",
+   "gooseIds": [
+    1005,
+    1007
+   ]
+  },
+  "207": {
+   "adornId": 207,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1008,
+    1011
+   ]
+  },
+  "208": {
+   "adornId": 208,
+   "adornName": "0",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "210": {
+   "adornId": 210,
+   "adornName": "0",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "301": {
+   "adornId": 301,
+   "adornName": "0",
+   "gooseIds": [
+    1008
+   ]
+  },
+  "302": {
+   "adornId": 302,
+   "adornName": "0",
+   "gooseIds": [
+    1011
+   ]
+  },
+  "303": {
+   "adornId": 303,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1012
+   ]
+  },
+  "304": {
+   "adornId": 304,
+   "adornName": "0",
+   "gooseIds": [
+    1010
+   ]
+  },
+  "305": {
+   "adornId": 305,
+   "adornName": "0",
+   "gooseIds": [
+    1007
+   ]
+  },
+  "306": {
+   "adornId": 306,
+   "adornName": "0",
+   "gooseIds": [
+    1013
+   ]
+  },
+  "308": {
+   "adornId": 308,
+   "adornName": "0",
+   "gooseIds": [
+    1009
+   ]
+  },
+  "309": {
+   "adornId": 309,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "310": {
+   "adornId": 310,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1005
+   ]
+  },
+  "401": {
+   "adornId": 401,
+   "adornName": "0",
+   "gooseIds": [
+    1014
+   ]
+  },
+  "402": {
+   "adornId": 402,
+   "adornName": "0",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "403": {
+   "adornId": 403,
+   "adornName": "0",
+   "gooseIds": [
+    1013
+   ]
+  },
+  "404": {
+   "adornId": 404,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "405": {
+   "adornId": 405,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "406": {
+   "adornId": 406,
+   "adornName": "0",
+   "gooseIds": [
+    1015
+   ]
+  },
+  "407": {
+   "adornId": 407,
+   "adornName": "0",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "408": {
+   "adornId": 408,
+   "adornName": "0",
+   "gooseIds": [
+    1010
+   ]
+  },
+  "409": {
+   "adornId": 409,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "410": {
+   "adornId": 410,
+   "adornName": "0",
+   "gooseIds": [
+    1006
+   ]
+  },
+  "501": {
+   "adornId": 501,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1003
+   ]
+  },
+  "502": {
+   "adornId": 502,
+   "adornName": "0",
+   "gooseIds": [
+    1007
+   ]
+  },
+  "503": {
+   "adornId": 503,
+   "adornName": "0",
+   "gooseIds": [
+    1017
+   ]
+  },
+  "504": {
+   "adornId": 504,
+   "adornName": "0",
+   "gooseIds": [
+    1015
+   ]
+  },
+  "505": {
+   "adornId": 505,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1003
+   ]
+  },
+  "506": {
+   "adornId": 506,
+   "adornName": "0",
+   "gooseIds": [
+    1009
+   ]
+  },
+  "507": {
+   "adornId": 507,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1013
+   ]
+  },
+  "508": {
+   "adornId": 508,
+   "adornName": "0",
+   "gooseIds": [
+    1017
+   ]
+  },
+  "509": {
+   "adornId": 509,
+   "adornName": "0",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "510": {
+   "adornId": 510,
+   "adornName": "0",
+   "gooseIds": [
+    1005
+   ]
+  },
+  "601": {
+   "adornId": 601,
+   "adornName": "0",
+   "gooseIds": [
+    1010
+   ]
+  },
+  "602": {
+   "adornId": 602,
+   "adornName": "0",
+   "gooseIds": [
+    1006
+   ]
+  },
+  "603": {
+   "adornId": 603,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1018
+   ]
+  },
+  "606": {
+   "adornId": 606,
+   "adornName": "0",
+   "gooseIds": [
+    1004
+   ]
+  },
+  "607": {
+   "adornId": 607,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1019
+   ]
+  },
+  "608": {
+   "adornId": 608,
+   "adornName": "0",
+   "gooseIds": [
+    1019
+   ]
+  },
+  "609": {
+   "adornId": 609,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "703": {
+   "adornId": 703,
+   "adornName": "0",
+   "gooseIds": [
+    1020
+   ]
+  },
+  "803": {
+   "adornId": 803,
+   "adornName": "0",
+   "gooseIds": [
+    1022
+   ]
+  },
+  "807": {
+   "adornId": 807,
+   "adornName": "0",
+   "gooseIds": [
+    1023
+   ]
+  },
+  "100004": {
+   "adornId": 100004,
+   "adornName": "收银台",
+   "gooseIds": [
+    1007,
+    1008
+   ]
+  },
+  "100006": {
+   "adornId": 100006,
+   "adornName": "花盆桌",
+   "gooseIds": [
+    1006
+   ]
+  },
+  "100007": {
+   "adornId": 100007,
+   "adornName": "调料区",
+   "gooseIds": [
+    1007
+   ]
+  },
+  "100009": {
+   "adornId": 100009,
+   "adornName": "水果区",
+   "gooseIds": [
+    1008
+   ]
+  },
+  "100010": {
+   "adornId": 100010,
+   "adornName": "冰箱",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "100011": {
+   "adornId": 100011,
+   "adornName": "水果切",
+   "gooseIds": [
+    1006
+   ]
+  },
+  "100102": {
+   "adornId": 100102,
+   "adornName": "吧台",
+   "gooseIds": [
+    1002,
+    1009
+   ]
+  },
+  "100105": {
+   "adornId": 100105,
+   "adornName": "收银台",
+   "gooseIds": [
+    1007
+   ]
+  },
+  "100109": {
+   "adornId": 100109,
+   "adornName": "小桌子",
+   "gooseIds": [
+    1002,
+    1004
+   ]
+  },
+  "100110": {
+   "adornId": 100110,
+   "adornName": "小桌子",
+   "gooseIds": [
+    1001
+   ]
+  },
+  "100113": {
+   "adornId": 100113,
+   "adornName": "包间1",
+   "gooseIds": [
+    1002,
+    1004
+   ]
+  },
+  "100115": {
+   "adornId": 100115,
+   "adornName": "包间2",
+   "gooseIds": [
+    1002,
+    1004
+   ]
+  },
+  "100118": {
+   "adornId": 100118,
+   "adornName": "门",
+   "gooseIds": [
+    1007
+   ]
+  },
+  "100304": {
+   "adornId": 100304,
+   "adornName": "0",
+   "gooseIds": [
+    1007
+   ]
+  },
+  "100305": {
+   "adornId": 100305,
+   "adornName": "0",
+   "gooseIds": [
+    1007
+   ]
+  },
+  "100306": {
+   "adornId": 100306,
+   "adornName": "0",
+   "gooseIds": [
+    1008
+   ]
+  },
+  "100307": {
+   "adornId": 100307,
+   "adornName": "0",
+   "gooseIds": [
+    1004,
+    1008
+   ]
+  },
+  "100308": {
+   "adornId": 100308,
+   "adornName": "0",
+   "gooseIds": [
+    1003,
+    1004
+   ]
+  },
+  "100310": {
+   "adornId": 100310,
+   "adornName": "0",
+   "gooseIds": [
+    1010
+   ]
+  },
+  "100313": {
+   "adornId": 100313,
+   "adornName": "0",
+   "gooseIds": [
+    1010
+   ]
+  },
+  "100314": {
+   "adornId": 100314,
+   "adornName": "0",
+   "gooseIds": [
+    1006
+   ]
+  },
+  "100316": {
+   "adornId": 100316,
+   "adornName": "0",
+   "gooseIds": [
+    1008
+   ]
+  },
+  "100317": {
+   "adornId": 100317,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "100319": {
+   "adornId": 100319,
+   "adornName": "0",
+   "gooseIds": [
+    1010
+   ]
+  },
+  "100320": {
+   "adornId": 100320,
+   "adornName": "0",
+   "gooseIds": [
+    1009
+   ]
+  },
+  "100321": {
+   "adornId": 100321,
+   "adornName": "0",
+   "gooseIds": [
+    1006
+   ]
+  },
+  "100322": {
+   "adornId": 100322,
+   "adornName": "0",
+   "gooseIds": [
+    1005
+   ]
+  },
+  "100402": {
+   "adornId": 100402,
+   "adornName": "0",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "100403": {
+   "adornId": 100403,
+   "adornName": "0",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "100405": {
+   "adornId": 100405,
+   "adornName": "0",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "100408": {
+   "adornId": 100408,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "100409": {
+   "adornId": 100409,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "100410": {
+   "adornId": 100410,
+   "adornName": "0",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "100412": {
+   "adornId": 100412,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "100414": {
+   "adornId": 100414,
+   "adornName": "0",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "100415": {
+   "adornId": 100415,
+   "adornName": "0",
+   "gooseIds": [
+    1011
+   ]
+  },
+  "100416": {
+   "adornId": 100416,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "100417": {
+   "adornId": 100417,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "100419": {
+   "adornId": 100419,
+   "adornName": "0",
+   "gooseIds": [
+    1008
+   ]
+  },
+  "100502": {
+   "adornId": 100502,
+   "adornName": "0",
+   "gooseIds": [
+    1013
+   ]
+  },
+  "100507": {
+   "adornId": 100507,
+   "adornName": "0",
+   "gooseIds": [
+    1010
+   ]
+  },
+  "100509": {
+   "adornId": 100509,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "100510": {
+   "adornId": 100510,
+   "adornName": "0",
+   "gooseIds": [
+    1011
+   ]
+  },
+  "100511": {
+   "adornId": 100511,
+   "adornName": "0",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "100512": {
+   "adornId": 100512,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "100513": {
+   "adornId": 100513,
+   "adornName": "0",
+   "gooseIds": [
+    1004
+   ]
+  },
+  "100514": {
+   "adornId": 100514,
+   "adornName": "0",
+   "gooseIds": [
+    1010
+   ]
+  },
+  "100515": {
+   "adornId": 100515,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "100516": {
+   "adornId": 100516,
+   "adornName": "0",
+   "gooseIds": [
+    1007
+   ]
+  },
+  "100517": {
+   "adornId": 100517,
+   "adornName": "0",
+   "gooseIds": [
+    1011
+   ]
+  },
+  "100518": {
+   "adornId": 100518,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1007
+   ]
+  },
+  "100602": {
+   "adornId": 100602,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "100604": {
+   "adornId": 100604,
+   "adornName": "0",
+   "gooseIds": [
+    1007
+   ]
+  },
+  "100605": {
+   "adornId": 100605,
+   "adornName": "0",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "100606": {
+   "adornId": 100606,
+   "adornName": "0",
+   "gooseIds": [
+    1011
+   ]
+  },
+  "100607": {
+   "adornId": 100607,
+   "adornName": "0",
+   "gooseIds": [
+    1010
+   ]
+  },
+  "100608": {
+   "adornId": 100608,
+   "adornName": "0",
+   "gooseIds": [
+    1004
+   ]
+  },
+  "100609": {
+   "adornId": 100609,
+   "adornName": "0",
+   "gooseIds": [
+    1004
+   ]
+  },
+  "100610": {
+   "adornId": 100610,
+   "adornName": "0",
+   "gooseIds": [
+    1012
+   ]
+  },
+  "100613": {
+   "adornId": 100613,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "100616": {
+   "adornId": 100616,
+   "adornName": "0",
+   "gooseIds": [
+    1013
+   ]
+  },
+  "100703": {
+   "adornId": 100703,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1014
+   ]
+  },
+  "100704": {
+   "adornId": 100704,
+   "adornName": "0",
+   "gooseIds": [
+    1010
+   ]
+  },
+  "100705": {
+   "adornId": 100705,
+   "adornName": "0",
+   "gooseIds": [
+    1004
+   ]
+  },
+  "100707": {
+   "adornId": 100707,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1003
+   ]
+  },
+  "100709": {
+   "adornId": 100709,
+   "adornName": "0",
+   "gooseIds": [
+    1006
+   ]
+  },
+  "100716": {
+   "adornId": 100716,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "100802": {
+   "adornId": 100802,
+   "adornName": "0",
+   "gooseIds": [
+    1004
+   ]
+  },
+  "100803": {
+   "adornId": 100803,
+   "adornName": "0",
+   "gooseIds": [
+    1015
+   ]
+  },
+  "100805": {
+   "adornId": 100805,
+   "adornName": "0",
+   "gooseIds": [
+    1010
+   ]
+  },
+  "100806": {
+   "adornId": 100806,
+   "adornName": "0",
+   "gooseIds": [
+    1013
+   ]
+  },
+  "100807": {
+   "adornId": 100807,
+   "adornName": "0",
+   "gooseIds": [
+    1007
+   ]
+  },
+  "100808": {
+   "adornId": 100808,
+   "adornName": "0",
+   "gooseIds": [
+    1013
+   ]
+  },
+  "100809": {
+   "adornId": 100809,
+   "adornName": "0",
+   "gooseIds": [
+    1014
+   ]
+  },
+  "100811": {
+   "adornId": 100811,
+   "adornName": "0",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "100812": {
+   "adornId": 100812,
+   "adornName": "0",
+   "gooseIds": [
+    1013
+   ]
+  },
+  "100816": {
+   "adornId": 100816,
+   "adornName": "0",
+   "gooseIds": [
+    1004
+   ]
+  },
+  "100817": {
+   "adornId": 100817,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "100818": {
+   "adornId": 100818,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "100819": {
+   "adornId": 100819,
+   "adornName": "0",
+   "gooseIds": [
+    1004
+   ]
+  },
+  "100902": {
+   "adornId": 100902,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "100905": {
+   "adornId": 100905,
+   "adornName": "0",
+   "gooseIds": [
+    1015
+   ]
+  },
+  "100906": {
+   "adornId": 100906,
+   "adornName": "0",
+   "gooseIds": [
+    1017
+   ]
+  },
+  "100907": {
+   "adornId": 100907,
+   "adornName": "0",
+   "gooseIds": [
+    1009
+   ]
+  },
+  "100908": {
+   "adornId": 100908,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "100909": {
+   "adornId": 100909,
+   "adornName": "0",
+   "gooseIds": [
+    1016
+   ]
+  },
+  "100910": {
+   "adornId": 100910,
+   "adornName": "0",
+   "gooseIds": [
+    1009
+   ]
+  },
+  "100911": {
+   "adornId": 100911,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "100914": {
+   "adornId": 100914,
+   "adornName": "0",
+   "gooseIds": [
+    1016
+   ]
+  },
+  "100915": {
+   "adornId": 100915,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1003
+   ]
+  },
+  "100918": {
+   "adornId": 100918,
+   "adornName": "0",
+   "gooseIds": [
+    1013
+   ]
+  },
+  "100919": {
+   "adornId": 100919,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1005
+   ]
+  },
+  "101002": {
+   "adornId": 101002,
+   "adornName": "0",
+   "gooseIds": [
+    1005
+   ]
+  },
+  "101003": {
+   "adornId": 101003,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "101004": {
+   "adornId": 101004,
+   "adornName": "0",
+   "gooseIds": [
+    1005
+   ]
+  },
+  "101005": {
+   "adornId": 101005,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "101006": {
+   "adornId": 101006,
+   "adornName": "0",
+   "gooseIds": [
+    1015
+   ]
+  },
+  "101007": {
+   "adornId": 101007,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1017
+   ]
+  },
+  "101008": {
+   "adornId": 101008,
+   "adornName": "0",
+   "gooseIds": [
+    1007
+   ]
+  },
+  "101010": {
+   "adornId": 101010,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "101013": {
+   "adornId": 101013,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "101014": {
+   "adornId": 101014,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "101015": {
+   "adornId": 101015,
+   "adornName": "0",
+   "gooseIds": [
+    1007,
+    1016
+   ]
+  },
+  "101103": {
+   "adornId": 101103,
+   "adornName": "0",
+   "gooseIds": [
+    1016
+   ]
+  },
+  "101106": {
+   "adornId": 101106,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1005,
+    1019
+   ]
+  },
+  "101109": {
+   "adornId": 101109,
+   "adornName": "0",
+   "gooseIds": [
+    1017
+   ]
+  },
+  "101110": {
+   "adornId": 101110,
+   "adornName": "0",
+   "gooseIds": [
+    1010
+   ]
+  },
+  "101112": {
+   "adornId": 101112,
+   "adornName": "0",
+   "gooseIds": [
+    1004
+   ]
+  },
+  "101113": {
+   "adornId": 101113,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "101114": {
+   "adornId": 101114,
+   "adornName": "0",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "101118": {
+   "adornId": 101118,
+   "adornName": "0",
+   "gooseIds": [
+    1004
+   ]
+  },
+  "101207": {
+   "adornId": 101207,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1007
+   ]
+  },
+  "101211": {
+   "adornId": 101211,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1003,
+    1018
+   ]
+  },
+  "101215": {
+   "adornId": 101215,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1006
+   ]
+  },
+  "101216": {
+   "adornId": 101216,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "101218": {
+   "adornId": 101218,
+   "adornName": "0",
+   "gooseIds": [
+    1006
+   ]
+  },
+  "101221": {
+   "adornId": 101221,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "101222": {
+   "adornId": 101222,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1003
+   ]
+  },
+  "101304": {
+   "adornId": 101304,
+   "adornName": "0",
+   "gooseIds": [
+    1018
+   ]
+  },
+  "101305": {
+   "adornId": 101305,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "101306": {
+   "adornId": 101306,
+   "adornName": "0",
+   "gooseIds": [
+    1017
+   ]
+  },
+  "101308": {
+   "adornId": 101308,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "101309": {
+   "adornId": 101309,
+   "adornName": "0",
+   "gooseIds": [
+    1005
+   ]
+  },
+  "101310": {
+   "adornId": 101310,
+   "adornName": "0",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "101313": {
+   "adornId": 101313,
+   "adornName": "0",
+   "gooseIds": [
+    1004
+   ]
+  },
+  "101315": {
+   "adornId": 101315,
+   "adornName": "0",
+   "gooseIds": [
+    1020
+   ]
+  },
+  "101319": {
+   "adornId": 101319,
+   "adornName": "0",
+   "gooseIds": [
+    1003,
+    1006
+   ]
+  },
+  "101320": {
+   "adornId": 101320,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "101321": {
+   "adornId": 101321,
+   "adornName": "0",
+   "gooseIds": [
+    1008
+   ]
+  },
+  "101324": {
+   "adornId": 101324,
+   "adornName": "0",
+   "gooseIds": [
+    1002,
+    1020
+   ]
+  },
+  "101405": {
+   "adornId": 101405,
+   "adornName": "0",
+   "gooseIds": [
+    1007
+   ]
+  },
+  "101406": {
+   "adornId": 101406,
+   "adornName": "0",
+   "gooseIds": [
+    1013
+   ]
+  },
+  "101407": {
+   "adornId": 101407,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "101408": {
+   "adornId": 101408,
+   "adornName": "0",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "101411": {
+   "adornId": 101411,
+   "adornName": "0",
+   "gooseIds": [
+    1019
+   ]
+  },
+  "101412": {
+   "adornId": 101412,
+   "adornName": "0",
+   "gooseIds": [
+    1021
+   ]
+  },
+  "101415": {
+   "adornId": 101415,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "101420": {
+   "adornId": 101420,
+   "adornName": "0",
+   "gooseIds": [
+    1015
+   ]
+  },
+  "101421": {
+   "adornId": 101421,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "101503": {
+   "adornId": 101503,
+   "adornName": "未建造3",
+   "gooseIds": [
+    1014
+   ]
+  },
+  "101505": {
+   "adornId": 101505,
+   "adornName": "",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "101508": {
+   "adornId": 101508,
+   "adornName": "",
+   "gooseIds": [
+    1022
+   ]
+  },
+  "101509": {
+   "adornId": 101509,
+   "adornName": "",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "101510": {
+   "adornId": 101510,
+   "adornName": "",
+   "gooseIds": [
+    1008
+   ]
+  },
+  "101512": {
+   "adornId": 101512,
+   "adornName": "",
+   "gooseIds": [
+    1005
+   ]
+  },
+  "101513": {
+   "adornId": 101513,
+   "adornName": "",
+   "gooseIds": [
+    1016
+   ]
+  },
+  "101514": {
+   "adornId": 101514,
+   "adornName": "",
+   "gooseIds": [
+    1003
+   ]
+  },
+  "101613": {
+   "adornId": 101613,
+   "adornName": "0",
+   "gooseIds": [
+    1021
+   ]
+  },
+  "101620": {
+   "adornId": 101620,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "101621": {
+   "adornId": 101621,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "101624": {
+   "adornId": 101624,
+   "adornName": "0",
+   "gooseIds": [
+    1023
+   ]
+  },
+  "101625": {
+   "adornId": 101625,
+   "adornName": "0",
+   "gooseIds": [
+    1002
+   ]
+  },
+  "101627": {
+   "adornId": 101627,
+   "adornName": "0",
+   "gooseIds": [
+    1019
+   ]
+  }
+ },
+ "metadata": {
+  "generatedAt": "2026-10-15T09:47:58.390Z",
+  "totalGoose": 23,
+  "totalAdorn": 401,
+  "processedSkins": 401,
+  "totalSkins": 802
+ }
+}

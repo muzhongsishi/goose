@@ -1,0 +1,1 @@
+{"bd1": {"101": {"id": 101, "robotRankName": "bd101", "playerExpectRank": 1, "playerExpectConsume": 3000, "expectCost": 300, "reward": [{"5001001": 1, "Energy": 100, "Diamond": 10, "film7": 1}, {"5003002": 1, "Energy": 100, "Diamond": 5, "film7": 1}, {"5003001": 1, "Energy": 80, "film6": 1}, {"5003001": 1, "Energy": 80}, {"Energy": 50}], "nextRaceId": 0, "finishScore": 300}}}

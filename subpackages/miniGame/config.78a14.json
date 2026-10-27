@@ -1,0 +1,1 @@
+{"paths":{"0":["common/p2/p2.d",0],"1":["rope3d/core/ZhiWanRope3DNativeTypes.d",0]},"types":["cc.TextAsset"],"uuids":["32gXO/tO9KkYODGXSM4oNA","e0kB4SOYpRUY8mi8BUOo5v"],"scenes":{},"redirect":[],"deps":[],"packs":{},"name":"miniGame","importBase":"import","nativeBase":"native","debug":false,"isZip":false,"encrypted":false,"versions":{"import":[0,"eded0",1,"3c60d"],"native":[]}}

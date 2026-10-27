@@ -1,0 +1,1 @@
+{"sail1": {"id": "sail1", "pointRate": 0.1, "minPoint": 1, "unlock": ["FinishDrawer13"], "triggerProtect": 1800, "hardPityCount": 2, "hardPityRobotType": "hard", "minScoreSecond": 5, "beginDialog": 9001, "endDialog": 9002, "finishDialog": 9003}}

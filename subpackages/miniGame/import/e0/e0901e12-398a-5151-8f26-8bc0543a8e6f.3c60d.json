@@ -1,0 +1,1 @@
+[1,0,0,[["cc.TextAsset",["_name","text"],1]],[[0,0,1,3]],[[0,"ZhiWanRope3DNativeTypes.d","// Creator 2.4 实现但项目声明未覆盖的公开接口。\ndeclare namespace cc {\n    interface Node {\n        getWorldPosition(out?: Vec3): Vec3;\n        setWorldPosition(position: Vec3): void;\n    }\n    interface Material { effectAsset: EffectAsset; }\n}\n"]],0,0,[],[],[]]

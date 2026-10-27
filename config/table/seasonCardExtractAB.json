@@ -1,0 +1,1 @@
+{"1": {"id": 1, "condition": "id % 10 < 5"}, "2": {"id": 2, "condition": "id % 10 >= 5"}}

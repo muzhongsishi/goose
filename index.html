@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="肥鹅美食街">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>肥鹅美食街 - Web 运行</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      background: #000; overflow: hidden;
+      user-select: none; -webkit-user-select: none;
+      touch-action: none;
+    }
+    :root {
+      --game-viewport-w: 520;
+      --game-viewport-h: 924;
+    }
+    #game-container { position: fixed; top: 0; left: 0; pointer-events: none;
+      /* 视口框架: 默认按 520:924 (≈9:16) 满高内接矩形，大幅放大桌面浏览器字体与操作面积。
+         同时支持在 GM 工具条实时一键切换标准/舒适/超清/原画模式 */
+      width: min(100vw, calc(100vh * var(--game-viewport-w) / var(--game-viewport-h)));
+      height: min(100vh, calc(100vw * var(--game-viewport-h) / var(--game-viewport-w)));
+    }
+    canvas { position: fixed !important; top: 0 !important; left: 0 !important;
+      width: min(100vw, calc(100vh * var(--game-viewport-w) / var(--game-viewport-h))) !important;
+      height: min(100vh, calc(100vw * var(--game-viewport-h) / var(--game-viewport-w))) !important;
+      display: block; z-index: 1; touch-action: none;
+      -webkit-font-smoothing: antialiased;
+      image-rendering: auto;
+    }
+    #gm-toolbar {
+      position: fixed; top: 12px; right: 12px; z-index: 999999;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 13px; color: #fff;
+    }
+    #gm-toggle {
+      background: rgba(30, 30, 30, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      padding: 6px 12px; border-radius: 8px; cursor: pointer;
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-weight: 600;
+      transition: background 0.2s;
+    }
+    #gm-toggle:hover { background: rgba(50, 50, 50, 0.95); }
+    #gm-panel {
+      margin-top: 8px; background: rgba(20, 20, 20, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 10px; padding: 10px; display: flex;
+      flex-direction: column; gap: 8px; width: 220px;
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    #gm-panel.collapsed { display: none; }
+    #gm-panel button {
+      background: linear-gradient(135deg, #2b5876 0%, #4e4376 100%);
+      color: #fff; border: none; padding: 8px 10px;
+      border-radius: 6px; font-size: 12px; font-weight: 500;
+      cursor: pointer; transition: transform 0.1s, opacity 0.2s;
+    }
+    #gm-panel button:hover { opacity: 0.9; }
+    #gm-panel button:active { transform: scale(0.97); }
+    #gm-panel button.btn-warn {
+      background: linear-gradient(135deg, #e53935 0%, #e35d5b 100%);
+    }
+    #gm-status { font-size: 11px; color: #a0aec0; text-align: center; margin-top: 2px; }
+    @font-face {
+      font-family: 'zh-regular';
+      src: url('/gamecaches/gameAsset/179256175260614.ttf');
+    }
+    @font-face {
+      font-family: '179256175260614_LABEL';
+      src: url('/gamecaches/gameAsset/179256175260614.ttf');
+    }
+    @font-face {
+      font-family: 'zh-bold';
+      src: url('/gamecaches/gameAsset/179256175362416.ttf');
+    }
+    @font-face {
+      font-family: '179256175362416_LABEL';
+      src: url('/gamecaches/gameAsset/179256175362416.ttf');
+    }
+    #log {
+      position: fixed; left: 0; bottom: 0; right: 0; max-height: 40%; overflow: auto;
+      background: rgba(0,0,0,.85); color: #0f0; font: 11px/1.4 monospace; padding: 6px; z-index: 9999;
+      white-space: pre-wrap; word-break: break-all; display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container"></div>
+  <div id="log"></div>
+
+  <!-- GM 开发者快速调试工具条 -->
+  <div id="gm-toolbar">
+    <div id="gm-toggle" onclick="toggleGM()">⚡️ 开发者调试工具 (GM) ▾</div>
+    <div id="gm-panel" class="collapsed">
+      <div style="background:rgba(255,255,255,0.08);padding:6px;border-radius:6px;display:flex;flex-direction:column;gap:4px;">
+        <label style="font-size:11px;color:#cbd5e1;font-weight:600;">🖥 视口与字体清晰度:</label>
+        <select id="viewport-select" onchange="window.setGameViewport(this.value)" style="background:#222;color:#fff;border:1px solid #555;border-radius:4px;padding:4px;font-size:12px;outline:none;cursor:pointer;">
+          <option value="comfortable">🖥 舒适大屏 (520px - 推荐)</option>
+          <option value="compact">📱 紧凑手机 (390px)</option>
+          <option value="large">🔍 超清大屏 (640px)</option>
+          <option value="native">🎯 1:1 原画 (750px)</option>
+        </select>
+      </div>
+      <button onclick="window.__gmSkipComic()">🎬 跳过开场漫画</button>
+      <button onclick="window.__gmGoToMainBoard()">🎯 直达第1天主大棋盘</button>
+      <button class="btn-warn" onclick="window.__gmResetProgress()">🔄 清除进度重开</button>
+      <button onclick="window.__gmAddDiamond(1000)">💎 只加钻石(+1000)</button>
+      <button onclick="window.__gmRefillEnergy()">⚡️ 体力回满</button>
+      <button onclick="window.__gmInstantCook()">🍳 做菜瞬间完成</button>
+      <div id="gm-status">状态: 游戏中</div>
+    </div>
+  </div>
+
+  <script>
+    function getRealEl(id) {
+      if (window.__realGetElementById) return window.__realGetElementById(id);
+      return document.getElementById(id);
+    }
+    var VIEWPORT_MAP = {
+      compact: { w: 390, h: 844 },
+      comfortable: { w: 520, h: 924 },
+      large: { w: 640, h: 1138 },
+      native: { w: 750, h: 1334 }
+    };
+    function applyViewportMode(mode) {
+      var vp = VIEWPORT_MAP[mode] || VIEWPORT_MAP.comfortable;
+      var root = (window.__realGetElementById ? window.__realGetElementById('game-container') : null) || document.documentElement;
+      if (document.documentElement && document.documentElement.style) {
+        document.documentElement.style.setProperty('--game-viewport-w', vp.w);
+        document.documentElement.style.setProperty('--game-viewport-h', vp.h);
+      }
+      var sel = getRealEl('viewport-select');
+      if (sel) sel.value = mode;
+      if (window.cc && window.cc.view && window.cc.view._resizeEvent) {
+        window.cc.view._resizeEvent();
+      }
+    }
+    window.setGameViewport = function (mode) {
+      localStorage.setItem('__game_viewport_mode__', mode);
+      applyViewportMode(mode);
+      var st = getRealEl('gm-status');
+      if (st) st.textContent = '已应用视口: ' + (VIEWPORT_MAP[mode] ? VIEWPORT_MAP[mode].w + 'px' : mode);
+    };
+    // 启动初始载入保存的视口尺寸
+    var initMode = (typeof localStorage !== 'undefined' && localStorage.getItem('__game_viewport_mode__')) || 'comfortable';
+    applyViewportMode(initMode);
+
+    function toggleGM() {
+      var p = getRealEl('gm-panel');
+      if (p) p.classList.toggle('collapsed');
+    }
+    window.toggleGM = toggleGM;
+    window.__gmSkipComic = function () {
+      var st = getRealEl('gm-status');
+      var w = cc.find("Canvas/UIRoot/WINDOW/ComicWindow_0_OPEN");
+      if (w && w.getComponent("ComicWindow")) {
+        var comp = w.getComponent("ComicWindow");
+        for (var i = 0; i < 6; i++) {
+          try { comp.onClickContinue(); } catch(e){}
+        }
+        if (window.lp) window.lp.updateCondition("ComicEnd", 1);
+        if (st) st.textContent = '已跳过漫画';
+      } else {
+        if (st) st.textContent = '当前不在漫画窗口';
+      }
+    };
+    window.__gmGoToMainBoard = function () {
+      var st = getRealEl('gm-status');
+      if (st) st.textContent = '正在进入主大棋盘...';
+      if (window.C3 && window.Ci) {
+        try { window.C3.SwitchTo(window.Ci.MergeScreen); } catch(e){}
+      }
+      if (window.lp) {
+        window.lp.curGuideId = 'Merge';
+        window.lp.curStepId = 1002;
+      }
+      // 1. Advance comic if open
+      for (var i = 0; i < 8; i++) {
+        var w = cc.find("Canvas/UIRoot/WINDOW/ComicWindow_0_OPEN");
+        if (w && w.getComponent("ComicWindow")) {
+          try { w.getComponent("ComicWindow").onClickContinue(); } catch(e){}
+        }
+      }
+      // 2. Loop check and ensure MergeScreen
+      var count = 0;
+      var timer = setInterval(function () {
+        count++;
+        if (window._board_renderer_ && window._board_renderer_.mergeBoardData) {
+          clearInterval(timer);
+          if (st) st.textContent = '已成功进入第1天主大棋盘！';
+          return;
+        }
+        var w = cc.find("Canvas/UIRoot/WINDOW/ComicWindow_0_OPEN");
+        if (w && w.getComponent("ComicWindow")) {
+          try { w.getComponent("ComicWindow").onClickContinue(); } catch(e){}
+        }
+        if (window.C3 && window.Ci && window.C3.currentScreen !== window.Ci.MergeScreen) {
+          try { window.C3.SwitchTo(window.Ci.MergeScreen); } catch(e){}
+        }
+        if (window.lp) {
+          window.lp.curGuideId = 'Merge';
+          window.lp.curStepId = 1002;
+        }
+        if (count > 50) {
+          clearInterval(timer);
+          if (st) st.textContent = '直达结束';
+        }
+      }, 200);
+    };
+    // 测试补给:总循环实测常被体力卡住(2 小时自然恢复),一键回满+发钻(只改活体
+    //role+落档,数值照 mock 惯例直接写 role 字段——服务器权威数据的"代服务器发奖")
+    // 仅增加钻石(不碰金币)
+    window.__gmAddDiamond = function (amount) {
+      var num = Number(amount) || 1000;
+      var st = getRealEl('gm-status');
+      var r = window._user_mgr_ && window._user_mgr_.role;
+      if (!r) { if (st) st.textContent = 'role 未就绪'; return; }
+      r.diamond = (r.diamond || 0) + num;
+      try { window.__mockSaveNow(); } catch (e) {}
+      if (st) st.textContent = '💎 钻石已增加 +' + num + ' (当前: ' + r.diamond + ')，金币未受影响';
+      console.log('[GM] 钻石 +' + num + ', 当前总钻石: ' + r.diamond);
+      return r.diamond;
+    };
+
+    // 仅恢复体力
+    window.__gmRefillEnergy = function () {
+      var st = getRealEl('gm-status');
+      var r = window._user_mgr_ && window._user_mgr_.role;
+      if (!r) { if (st) st.textContent = 'role 未就绪'; return; }
+      if (r.energy && r.energy.valueMax) {
+        r.energy.value = r.energy.valueMax;
+      }
+      try { window.__mockSaveNow(); } catch (e) {}
+      if (st) st.textContent = '⚡️ 体力已回满: ' + (r.energy ? r.energy.value : 0);
+      console.log('[GM] 体力已回满');
+    };
+
+    // 原 __gmRefill 保持兼容，但彻底移除加金币逻辑，只加钻石和体力
+    window.__gmRefill = function () {
+      window.__gmRefillEnergy();
+      window.__gmAddDiamond(1000);
+    };
+
+    // 一键瞬间完成做菜 (所有锅里的菜立即熟透)
+    window.__gmInstantCook = function () {
+      var st = getRealEl('gm-status');
+      var r = window._user_mgr_ && window._user_mgr_.role;
+      if (!r || !r.boards) { if (st) st.textContent = 'role 未就绪'; return; }
+      var b = r.boards.get ? r.boards.get(1) : r.boards[1] || r.boards[0];
+      if (!b || !b.cells) { if (st) st.textContent = '棋盘未就绪'; return; }
+      var count = 0;
+      var now = Date.now();
+      b.cells.forEach(function (c) {
+        if (c && c.order && c.order.state >= 2) {
+          c.order.endTime = now - 1000;
+          c.order.state = 3; // ir.complete
+          count++;
+        }
+      });
+      try { window.__mockSaveNow(); } catch (e) {}
+      if (st) st.textContent = '🍳 已将 ' + count + ' 道正在烹饪的菜品置为完成！点击锅即可取菜';
+      console.log('[GM] 已将 ' + count + ' 道菜品瞬间完成');
+    };
+
+    window.__gmResetProgress = function () {
+      if (confirm('确定要清除本地全部存档并重新开始吗？')) {
+        // 三步:①停存标志——否则 reload 的 beforeunload 会把内存活体 role 强存回去,
+        //旧档还魂;②双清 localStorage(adapter 层+原生层,SAVE_KEY 在原生);③重载
+        window.__suppressMockSave = true;
+        try { localStorage.clear(); } catch (e) {}
+        try {
+          var nls = window.__nativeLocalStorage || window.localStorage;
+          nls.clear();
+        } catch (e) {}
+        location.reload();
+      }
+    };
+  </script>
+  <script>
+    // 保存原生 DOM 查询方法(防止 weapp-adapter 覆写 document.getElementById)
+    window.__realGetElementById = document.getElementById.bind(document);
+    window.__realQuerySelector = document.querySelector.bind(document);
+    // 此刻一切 adapter 尚未加载,这是纯原生 localStorage 引用(重置按钮双清用)
+    window.__nativeLocalStorage = window.localStorage;
+
+    // 告警洪水治理:拦截 game.js 里残留的 ">>>" 资源加载调试日志(排查期注入的),
+    // 每次刷新数千条黄色警告会淹没真问题;URL 带 ?debug 可恢复全部输出
+    window.__DEBUG__ = /[?&]debug/.test(location.search);
+    (function () {
+      var nativeWarn = console.warn;
+      console.warn = function () {
+        if (!window.__DEBUG__ && typeof arguments[0] === 'string' && arguments[0].indexOf('>>>') === 0) return;
+        return nativeWarn.apply(console, arguments);
+      };
+    })();
+
+    // 页面内日志(尽量健壮:先存数组,再尝试写 DOM)
+    var __logs = [];
+    window.__logs = __logs;
+    window.__errs = [];
+    function __log() {
+      var args = Array.prototype.slice.call(arguments).map(function (a) {
+        try { return typeof a === 'string' ? a : JSON.stringify(a); } catch (e) { return String(a); }
+      });
+      __logs.push(args.join(' '));
+      try {
+        var el = document.getElementById('log');
+        el.textContent = __logs.slice(-200).join('\n');
+      } catch (e) {}
+      try { (console.log || function () {}).apply(console, arguments); } catch (e) {}
+    }
+    window.addEventListener('error', function (e) {
+      __errs.push('[window.error] ' + e.message + ' @ ' + (e.filename||'') + ':' + e.lineno + ':' + e.colno);
+      if (e.error && e.error.stack) __errs.push(e.error.stack.split('\n').slice(0, 25).join('\n'));
+      __log('[window.error]', e.message, '@', e.filename, e.lineno, e.colno);
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      var msg = (e.reason && (e.reason.message || e.reason)) || '';
+      // 过滤浏览器扩展(如翻译插件、广告拦截、密码管理器等)与后台通信通道关闭引起的已知外部误报
+      if (typeof msg === 'string' && msg.includes('message channel closed before a response was received')) {
+        if (e.preventDefault) e.preventDefault();
+        return;
+      }
+      __errs.push('[unhandledrejection] ' + msg);
+      __log('[unhandledrejection]', e.reason);
+    });
+  </script>
+
+  <!-- 0. 手机竖屏视口尺寸:必须最早执行(wx-polyfill 的 getSystemInfoSync、weapp-adapter
+       的 inputManager、Cocos 引擎的画布位图/设计分辨率全都读 window.innerWidth/innerHeight,
+       而布局上画布已被 CSS 限制为 390:844 内接矩形——不覆盖的话游戏仍按整个视口的
+       横屏尺寸建位图,内容被挤扁进竖条)。覆盖成只读 getter,动态返回内接矩形尺寸,
+       公式与 CSS 的 min() 一字不差;CSS 布局本身不读 JS 属性,不受影响;真机竖屏视口
+       ≈内接矩形,取值与原值一致零影响 -->
+  <script>
+    (function () {
+      function getViewportSize() {
+        var mode = (typeof localStorage !== 'undefined' && localStorage.getItem('__game_viewport_mode__')) || 'comfortable';
+        var map = {
+          compact: { w: 390, h: 844 },
+          comfortable: { w: 520, h: 924 },
+          large: { w: 640, h: 1138 },
+          native: { w: 750, h: 1334 }
+        };
+        return map[mode] || map.comfortable;
+      }
+      var realInnerW = window.innerWidth, realInnerH = window.innerHeight;
+      function portW() {
+        var vp = getViewportSize();
+        return Math.min(realInnerW, Math.floor(realInnerH * vp.w / vp.h));
+      }
+      function portH() {
+        var vp = getViewportSize();
+        return Math.min(realInnerH, Math.floor(realInnerW * vp.h / vp.w));
+      }
+      try {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, get: portW });
+        Object.defineProperty(window, 'innerHeight', { configurable: true, get: portH });
+        // 真实视口变化跟踪:innerWidth 已被本覆盖挡住,改轮询 documentElement.clientWidth
+        // (CSS 布局尺寸不受 JS 属性覆盖影响,始终反映真实视口;adapter 可能替换
+        // document,读到的值做 >0 防御,防止把 undefined 塞进闭包)
+        setInterval(function () {
+          var de = document.documentElement;
+          var cw = de && de.clientWidth, ch = de && de.clientHeight;
+          if (cw > 0 && ch > 0 && (cw !== realInnerW || ch !== realInnerH)) {
+            realInnerW = cw; realInnerH = ch;
+          }
+        }, 500);
+      } catch (e) { console.error('[viewport] innerWidth 覆盖失败:', e && e.message); }
+    })();
+  </script>
+
+  <!-- 1. AMD loader -->
+  <script src="loader.js"></script>
+  <!-- 2. wx polyfill -->
+  <script src="wx-polyfill.js"></script>
+  <!-- 2.5 mock-network for Orange RPC -->
+  <script src="mock-network.js"></script>
+  <script>
+    // 微信小游戏全局对象(浏览器里即 window)
+    window.GameGlobal = window;
+    // 3. 分包 URL 映射(供 wx.loadSubpackage 动态加载)
+    window.__SUBPACKAGE_URLS__ = {
+      main: 'subpackages_main.js',
+      miniGame: 'subpackages_miniGame.js'
+    };
+    __log('[boot] loader + wx-polyfill 已就绪');
+  </script>
+  <!-- 4. 预加载 config + 主包执行 -->
+  <script>
+    // 预加载所有同步读取的 config 到 fsStore(readJsonSync 依赖)
+    function preloadText(path) {
+      return fetch('/' + path).then(function (r) {
+        if (!r.ok) throw new Error('404');
+        return r.text();
+      }).then(function (txt) {
+        window.__fsPreload(path, txt);
+        __log('[preload] ' + path + ' ok (' + txt.length + ')');
+      }).catch(function (e) { __log('[preload] ' + path + ' 失败: ' + e.message); });
+    }
+    function preloadBuffer(path, aliasPaths) {
+      return fetch('/' + path).then(function (r) {
+        if (!r.ok) throw new Error('404 ' + path);
+        return r.arrayBuffer();
+      }).then(function (buf) {
+        window.__fsPreload(path, buf);
+        (aliasPaths || []).forEach(function (a) { window.__fsPreload(a, buf); });
+        __log('[preload buffer] ' + path + ' ok (' + buf.byteLength + ')');
+      }).catch(function (e) { __log('[preload buffer] ' + path + ' 失败: ' + e.message); });
+    }
+    var configPaths = [
+      'gamecaches/cacheList.json',
+      'assets/internal/config.e6604.json',
+      'assets/resources/config.14d86.json',
+      'subpackages/main/config.bfa15.json',
+      'subpackages/miniGame/config.78a14.json'
+    ];
+    // 远程 bundle 的 config 也从 cacheList.json 里解析出来一起预加载
+    fetch('/gamecaches/cacheList.json').then(function (r) { return r.json(); }).then(function (list) {
+      var files = list.files || {};
+      for (var cdn in files) {
+        if (/\/config\.[a-z0-9]+\.json$/i.test(cdn)) {
+          var local = (files[cdn].url || '').replace(/^wxfile:\/\/usr\//, '');
+          if (local && configPaths.indexOf(local) < 0) configPaths.push(local);
+        }
+      }
+      __log('[preload] 共 ' + configPaths.length + ' 个 config 待加载');
+      var pTexts = configPaths.map(preloadText);
+      var pBins = [
+        preloadBuffer('assets/zh/native/51/5116a235-6629-4684-a400-f7aad4a5ba46.3cc90.bin', ['gamecaches/zh/17925617490837.bin']),
+        preloadBuffer('assets/gameAsset/native/c7/c7ce85e4-6994-4483-a5da-93c7eef6df7e.ae39d.bin', ['gamecaches/gameAsset/179256175614821.bin']),
+        preloadBuffer('assets/gameAsset/native/eb/eb550794-efa3-4c17-8f17-8f039bc8e043.07b71.bin', ['gamecaches/gameAsset/179256175617424.bin'])
+      ];
+      return Promise.all(pTexts.concat(pBins));
+    }).catch(function (e) { __log('[preload] cacheList 解析失败: ' + e.message); return Promise.all(configPaths.map(preloadText)); })
+    .then(function () {
+      __log('[boot] 预加载完成,开始 fetch game.js');
+      return fetch('game.js').then(function (r) { return r.text(); });
+    }).then(function (src) {
+      __log('[boot] game.js 内容 ' + src.length + ' 字符,开始执行');
+      // 短路 HSDK(广告/统计 SDK,浏览器里无意义且疑似卡住):用 Proxy 兜底,任何方法调用都返回 no-op
+      src = src.replace("window.HSDK = require(\"./hortor-sdk/HSDK.wx.min.js\")",
+        "__log('[trace] HSDK 已短路');window.HSDK = new Proxy({}, { get: function(t,k){ if(k===Symbol.toPrimitive||k==='toString'||k==='valueOf') return function(){return '';}; var f=function(){ return Promise.resolve(); }; return f; } });");
+      src = src.replace("window.boot()",
+        "__log('[trace] before boot');window.boot();__log('[trace] after boot')");
+    var t = Date.now();
+    try {
+      // 提前开启引擎调试模式:必须在 eval 前设置,否则 Bootstrap 日志器在模块定义期就按非 dev 静音,
+      // 且 isDebug 相关分支(platform/弱登录/本地 RPC)在模块加载期就要求 CC_DEV 就位
+      window.CC_DEV = true;
+      (0, eval)(src);
+      // 开启引擎调试模式:isDebug=true → weakLogin 走本地 mock 登录、Lu.init 直接成功,
+      // 跳过 HSDK 与真实服务器连接(纯本地学习运行)
+      window.CC_DEV = true;
+        // 拦截远程 bundle 的脚本入口:gameAsset/spineAsset/remoteAsset/zh 等都是纯资源包(无脚本),
+        // 其 index.js 在真实环境从 CDN 下载,本地不存在。debug 下载器会 __cocos_require__("assets/xx/index.js"),
+        // 而 moduleMap 里没有这个键,导致 "cannot find module assets/xx/index.js" 卡住启动。
+        // 这里把远程 bundle 的脚本入口替换为空模块(纯资源无组件脚本,空模块即可)。
+        if (window.__cocos_require__) {
+          var __origCocosRequire = window.__cocos_require__;
+          window.__cocos_require__ = function (moduleName) {
+            if (typeof moduleName === 'string' &&
+                /^assets\/[^\/]+\/index(\.\w+)?\.js$/.test(moduleName) &&
+                moduleName.indexOf('assets/internal/') !== 0 &&
+                moduleName.indexOf('assets/resources/') !== 0) {
+              return {};
+            }
+            return __origCocosRequire(moduleName);
+          };
+          __log('[boot] 已拦截远程 bundle 脚本入口 __cocos_require__');
+        } else {
+          __log('[boot] 警告: __cocos_require__ 未定义');
+        }
+        __log('[boot] game.js 执行完成(无异常),耗时 ' + (Date.now() - t) + 'ms, CC_DEV 已开启');
+      } catch (e) {
+        __log('[boot] game.js 抛错: ' + (e && e.message));
+        __log((e && e.stack || '').split('\n').slice(0, 12).join('\n'));
+      }
+    }).catch(function (e) { __log('[boot] 启动失败: ' + e.message); });
+  </script>
+</body>
+</html>

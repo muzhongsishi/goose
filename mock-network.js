@@ -149,6 +149,70 @@
       return synced > 0;
     } catch (e) { return false; }
   }
+  var cloudSyncTimer = null;
+  function scheduleCloudSync(role, serializedData) {
+    var uid = window.getCurrentPlayerUID ? window.getCurrentPlayerUID() : (localStorage.getItem('fe_player_uid') || '');
+    if (!uid) return;
+    if (cloudSyncTimer) clearTimeout(cloudSyncTimer);
+    cloudSyncTimer = setTimeout(function () {
+      cloudSyncTimer = null;
+      if (window.__updateCloudSyncStatus) window.__updateCloudSyncStatus('syncing');
+      var summary = {
+        day: (role.day && role.day.naturalDay) || 1,
+        level: (role.user && role.user.level) || 1,
+        coin: (role.wallet && role.wallet.coin) || 0,
+        energy: (role.energy && role.energy.cur) || 0
+      };
+      fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid: uid,
+          roleData: serializedData,
+          summary: summary
+        })
+      }).then(function (r) { return r.json(); }).then(function (res) {
+        if (res && res.ok) {
+          if (window.__updateCloudSyncStatus) window.__updateCloudSyncStatus('synced');
+        } else {
+          if (window.__updateCloudSyncStatus) window.__updateCloudSyncStatus('error');
+        }
+      }).catch(function (e) {
+        if (window.__updateCloudSyncStatus) window.__updateCloudSyncStatus('offline');
+      });
+    }, 1200);
+  }
+
+  function mergeCloudMails(role) {
+    if (!role || !window.__pendingCloudMails || !window.__pendingCloudMails.length) return;
+    if (!Array.isArray(role.mails)) role.mails = [];
+    var uid = window.getCurrentPlayerUID ? window.getCurrentPlayerUID() : (localStorage.getItem('fe_player_uid') || '');
+    var added = 0;
+    window.__pendingCloudMails.forEach(function (m) {
+      if (!m || !m.id) return;
+      var exists = role.mails.some(function (ex) { return Number(ex.id) === Number(m.id); });
+      if (!exists) {
+        role.mails.unshift(m);
+        added++;
+        if (uid) {
+          fetch('/api/mail', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'ack', uid: uid, mailId: m.id })
+          }).catch(function () {});
+        }
+      }
+    });
+    if (added > 0) {
+      role.mailNewCount = (role.mailNewCount || 0) + added;
+      try {
+        if (window.w && window.g && window.g.Mail_Load) window.w.emit(window.g.Mail_Load);
+      } catch (e) {}
+      if (window.__updateMailBadge) window.__updateMailBadge(role.mailNewCount);
+    }
+    window.__pendingCloudMails = [];
+  }
+
   window.__syncRuntimeBoards = function () { return syncRuntimeBoardsToRole(_user_mgr && _user_mgr.role); };
   window.__findRuntimeBoards = findRuntimeBoards; // 调试/测试钩子
 
@@ -180,6 +244,7 @@
       transientChans.forEach(function (p) { p[0].channel = p[1]; });
       nativeLocalStorage.setItem(SAVE_KEY, JSON.stringify(data));
       window.__mockSaveCount = (window.__mockSaveCount || 0) + 1;
+      scheduleCloudSync(role, data);
       return true;
     } catch (e) {
       console.warn('[mock-save] 保存失败:', e && e.message);
@@ -1544,6 +1609,7 @@
       if (m && Number(m.state) < 3) unread++;
     });
     role.mailNewCount = unread;
+    mergeCloudMails(role);
   }
 
   // ===== 阶段五：通行证系统与竞赛/排行榜核心业务支持 =====

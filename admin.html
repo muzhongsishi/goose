@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>肥鹅健身房 - 管理员运营后台</title>
+  <style>
+    :root {
+      --primary: #f26b1d;
+      --primary-hover: #d9580f;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --text-muted: #64748b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding: 20px; }
+    .container { max-width: 960px; margin: 0 auto; }
+    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+    h1 { font-size: 20px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+    .auth-box { display: flex; gap: 8px; align-items: center; }
+    input, select, textarea {
+      padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; outline: none; transition: border-color 0.2s;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--primary); }
+    button {
+      padding: 8px 16px; background-color: var(--primary); color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background-color 0.2s;
+    }
+    button:hover { background-color: var(--primary-hover); }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .card-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+    .user-card {
+      border: 1px solid var(--border); border-radius: 8px; padding: 14px; background: #fff; cursor: pointer; transition: all 0.2s;
+    }
+    .user-card:hover, .user-card.selected { border-color: var(--primary); background: #fffaf5; }
+    .user-uid { font-size: 16px; font-weight: bold; color: var(--primary); margin-bottom: 6px; }
+    .user-meta { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
+    .form-row { display: flex; gap: 12px; }
+    .form-row > * { flex: 1; }
+    .reward-badges { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+    .badge-input { display: flex; align-items: center; gap: 6px; font-size: 13px; background: #f1f5f9; padding: 6px 10px; border-radius: 6px; }
+    .badge-input input { width: 70px; padding: 4px 6px; }
+    .badge-input span { font-weight: 600; }
+    .tip { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+    .status-msg { margin-top: 12px; font-size: 14px; font-weight: 600; }
+    .status-success { color: #16a34a; }
+    .status-error { color: #dc2626; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>🪿 肥鹅健身房 - 管理与发信后台</h1>
+    <div class="auth-box">
+      <input type="password" id="secretInput" placeholder="管理员密钥" value="admin666" style="width: 120px;">
+      <button onclick="loadUsers()">刷新玩家</button>
+    </div>
+  </header>
+
+  <!-- 1. 玩家列表 -->
+  <div class="card">
+    <div class="card-title">
+      <span>👥 当前活跃玩家列表 (<span id="userCount">0</span>)</span>
+      <span style="font-size: 12px; color: var(--text-muted);">点击玩家卡片可自动填入发信收件人</span>
+    </div>
+    <div class="grid" id="userGrid">
+      <div style="color: var(--text-muted); font-size: 13px;">点击右上角“刷新玩家”获取最新名单</div>
+    </div>
+  </div>
+
+  <!-- 2. 发送邮件与补给道具 -->
+  <div class="card">
+    <div class="card-title">
+      <span>✉️ 发送系统邮件与道具附件</span>
+    </div>
+
+    <div class="form-group">
+      <label>目标收件人 (UID / 昵称)</label>
+      <input type="text" id="targetUid" placeholder="输入 UID，例如 1001，或输入 all 发给所有人" style="width: 100%;" value="all">
+      <div class="tip">提示：填 <b>all</b> 即为全服广播邮件，所有玩家信箱均可收到</div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>邮件标题</label>
+        <input type="text" id="mailTitle" value="店长专属专属福利补给" style="width: 100%;">
+      </div>
+      <div class="form-group">
+        <label>发件人名称</label>
+        <input type="text" id="mailFrom" value="肥鹅后勤部" style="width: 100%;">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>信件内容</label>
+      <textarea id="mailContent" rows="3" style="width: 100%; resize: vertical;">亲爱的店长，感谢参与内测体验！这是特意为您送上的补给物资，祝您游戏愉快！</textarea>
+    </div>
+
+    <div class="form-group">
+      <label>🎁 附件道具配置 (不需要的填 0 即可)</label>
+      <div class="reward-badges">
+        <div class="badge-input">
+          <span>⚡ 体力:</span>
+          <input type="number" id="rewardEnergy" value="100" min="0">
+        </div>
+        <div class="badge-input">
+          <span>💰 金币:</span>
+          <input type="number" id="rewardCoin" value="2000" min="0">
+        </div>
+        <div class="badge-input">
+          <span>💎 钻石:</span>
+          <input type="number" id="rewardDiamond" value="100" min="0">
+        </div>
+        <div class="badge-input">
+          <span>⏱️ 加速券:</span>
+          <input type="number" id="rewardSpeed" value="10" min="0">
+        </div>
+      </div>
+    </div>
+
+    <button onclick="sendMail()" style="padding: 10px 24px; font-size: 15px; margin-top: 10px;">🚀 立即发送邮件到信箱</button>
+    <div id="statusMsg" class="status-msg"></div>
+  </div>
+</div>
+
+<script>
+  function getSecret() {
+    return document.getElementById('secretInput').value.trim();
+  }
+
+  async function loadUsers() {
+    const secret = getSecret();
+    const grid = document.getElementById('userGrid');
+    const countEl = document.getElementById('userCount');
+    grid.innerHTML = '<div style="color: #64748b;">正在加载玩家列表...</div>';
+
+    try {
+      const res = await fetch(`/api/admin?secret=${encodeURIComponent(secret)}`);
+      const data = await res.json();
+      if (!data.ok) {
+        grid.innerHTML = `<div style="color: #dc2626;">获取失败: ${data.error || '密钥错误'}</div>`;
+        return;
+      }
+
+      countEl.innerText = data.users.length;
+      if (data.users.length === 0) {
+        grid.innerHTML = '<div style="color: #64748b; font-size: 13px;">暂无活跃玩家（玩家在手机端启动并玩一步后将自动出现在这里）</div>';
+        return;
+      }
+
+      grid.innerHTML = '';
+      data.users.forEach(u => {
+        const timeStr = u.updatedAt ? new Date(u.updatedAt).toLocaleString() : '未知';
+        const card = document.createElement('div');
+        card.className = 'user-card';
+        card.innerHTML = `
+          <div class="user-uid">👤 UID: ${u.uid}</div>
+          <div class="user-meta">
+            <div>📅 游戏进度: 第 ${u.day || 1} 天 / 等级 ${u.level || 1}</div>
+            <div>⚡ 体力: ${u.energy || 0} | 💰 金币: ${u.coin || 0}</div>
+            <div>🕒 最后保存: ${timeStr}</div>
+          </div>
+        `;
+        card.onclick = () => {
+          document.querySelectorAll('.user-card').forEach(c => c.classList.remove('selected'));
+          card.classList.add('selected');
+          document.getElementById('targetUid').value = u.uid;
+        };
+        grid.appendChild(card);
+      });
+    } catch (err) {
+      grid.innerHTML = `<div style="color: #dc2626;">请求异常: ${err.message}</div>`;
+    }
+  }
+
+  async function sendMail() {
+    const secret = getSecret();
+    const targetUid = document.getElementById('targetUid').value.trim();
+    const title = document.getElementById('mailTitle').value.trim();
+    const from = document.getElementById('mailFrom').value.trim();
+    const content = document.getElementById('mailContent').value.trim();
+    const statusMsg = document.getElementById('statusMsg');
+
+    const energy = Number(document.getElementById('rewardEnergy').value) || 0;
+    const coin = Number(document.getElementById('rewardCoin').value) || 0;
+    const diamond = Number(document.getElementById('rewardDiamond').value) || 0;
+    const speed = Number(document.getElementById('rewardSpeed').value) || 0;
+
+    const rewards = [];
+    if (coin > 0) rewards.push({ itemType: 1, itemId: 0, value: coin });
+    if (diamond > 0) rewards.push({ itemType: 2, itemId: 0, value: diamond });
+    if (energy > 0) rewards.push({ itemType: 4, itemId: 0, value: energy });
+    if (speed > 0) rewards.push({ itemType: 5, itemId: 0, value: speed });
+
+    statusMsg.className = 'status-msg';
+    statusMsg.innerText = '正在发送中...';
+
+    try {
+      const res = await fetch('/api/mail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'send',
+          secret,
+          targetUid,
+          title,
+          from,
+          content,
+          rewards
+        })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        statusMsg.className = 'status-msg status-success';
+        statusMsg.innerText = `✅ 发送成功！[${targetUid}] 的信箱将在下次打开或刷新时收到信件与附件！`;
+      } else {
+        statusMsg.className = 'status-msg status-error';
+        statusMsg.innerText = `❌ 发送失败: ${data.error || '未知错误'}`;
+      }
+    } catch (err) {
+      statusMsg.className = 'status-msg status-error';
+      statusMsg.innerText = `❌ 发送异常: ${err.message}`;
+    }
+  }
+
+  // 页面加载时自动拉一次
+  window.onload = loadUsers;
+</script>
+</body>
+</html>

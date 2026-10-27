@@ -88,11 +88,180 @@
       background: rgba(0,0,0,.85); color: #0f0; font: 11px/1.4 monospace; padding: 6px; z-index: 9999;
       white-space: pre-wrap; word-break: break-all; display: none;
     }
+    /* 顶部玩家云同步与信箱状态栏 */
+    #user-topbar {
+      position: fixed; top: 12px; left: 12px; z-index: 999999;
+      display: flex; gap: 8px; align-items: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 12px; color: #fff;
+    }
+    .topbar-pill {
+      background: rgba(30, 30, 30, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      padding: 6px 12px; border-radius: 20px; cursor: pointer;
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-weight: 600;
+      display: flex; align-items: center; gap: 6px; position: relative;
+    }
+    .topbar-pill:hover { background: rgba(50, 50, 50, 0.95); }
+    .badge-dot {
+      width: 8px; height: 8px; background: #ef4444; border-radius: 50%;
+      position: absolute; top: 4px; right: 4px; display: none;
+    }
+    /* UID 登录/绑定模态框 */
+    #uid-modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7); z-index: 10000000;
+      display: none; align-items: center; justify-content: center;
+      backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+    }
+    .uid-modal-card {
+      background: #ffffff; color: #1e293b; border-radius: 16px;
+      padding: 24px; width: 85%; max-width: 320px; text-align: center;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .uid-modal-card h3 { margin: 0 0 10px 0; font-size: 18px; color: #f26b1d; }
+    .uid-modal-card p { margin: 0 0 16px 0; font-size: 13px; color: #64748b; line-height: 1.5; }
+    .uid-modal-card input {
+      width: 100%; padding: 10px 14px; border: 1.5px solid #cbd5e1;
+      border-radius: 8px; font-size: 15px; margin-bottom: 16px; box-sizing: border-box;
+      text-align: center; font-weight: bold; outline: none;
+    }
+    .uid-modal-card input:focus { border-color: #f26b1d; }
+    .uid-modal-card button {
+      width: 100%; padding: 11px; background: #f26b1d; color: #fff;
+      border: none; border-radius: 8px; font-size: 15px; font-weight: bold;
+      cursor: pointer; transition: background 0.2s;
+    }
+    .uid-modal-card button:hover { background: #d9580f; }
   </style>
 </head>
 <body>
   <div id="game-container"></div>
   <div id="log"></div>
+
+  <!-- 顶部玩家云同步与信箱状态栏 -->
+  <div id="user-topbar">
+    <div class="topbar-pill" onclick="promptChangeUID()" title="点击切换或修改测试ID">
+      <span>👤</span><span id="player-uid-display">UID: 游客</span>
+    </div>
+    <div class="topbar-pill" onclick="handleOpenMail()" title="打开系统信箱">
+      <span>✉️</span><span>信箱</span>
+      <div id="mail-badge" class="badge-dot"></div>
+    </div>
+    <div class="topbar-pill" style="cursor: default;" id="sync-status-pill">
+      <span id="sync-icon">☁️</span><span id="sync-status-text">已连接</span>
+    </div>
+  </div>
+
+  <!-- UID 弹窗 -->
+  <div id="uid-modal-overlay">
+    <div class="uid-modal-card">
+      <h3>🪿 欢迎来到肥鹅健身房</h3>
+      <p>请输入您的专属测试昵称或编号，您的进度和信箱道具将实时同步到云端：</p>
+      <input type="text" id="uid-input" placeholder="例如: 1001 或 娟娟">
+      <button onclick="confirmPlayerUID()">进入游戏</button>
+    </div>
+  </div>
+
+  <script>
+    function getStoredUID() {
+      return localStorage.getItem('fe_player_uid') || '';
+    }
+    function updateUIDDisplay(uid) {
+      var el = document.getElementById('player-uid-display');
+      if (el) el.innerText = 'UID: ' + (uid || '未设置');
+    }
+    window.getCurrentPlayerUID = function () {
+      return getStoredUID();
+    };
+    window.__updateCloudSyncStatus = function (status) {
+      var icon = document.getElementById('sync-icon');
+      var txt = document.getElementById('sync-status-text');
+      if (!txt) return;
+      if (status === 'syncing') {
+        txt.innerText = '同步中...';
+      } else if (status === 'synced') {
+        txt.innerText = '已同步';
+      } else if (status === 'offline') {
+        txt.innerText = '本地离线';
+      } else if (status === 'error') {
+        txt.innerText = '同步异常';
+      }
+    };
+    window.__updateMailBadge = function (count) {
+      var badge = document.getElementById('mail-badge');
+      if (!badge) return;
+      if (count && count > 0) {
+        badge.style.display = 'block';
+      } else {
+        badge.style.display = 'none';
+      }
+    };
+    function handleOpenMail() {
+      if (window.openMailWindow) {
+        window.openMailWindow();
+        window.__updateMailBadge(0);
+      } else {
+        alert('游戏主界面加载中，请稍候再点信箱~');
+      }
+    }
+    function promptChangeUID() {
+      var cur = getStoredUID();
+      var input = prompt('请输入新的测试 UID / 昵称 (更换后将自动从云端加载对应的存档):', cur);
+      if (input !== null && input.trim()) {
+        localStorage.setItem('fe_player_uid', input.trim());
+        updateUIDDisplay(input.trim());
+        location.reload();
+      }
+    }
+    function confirmPlayerUID() {
+      var input = document.getElementById('uid-input').value.trim();
+      if (!input) {
+        alert('请输入昵称或编号，方便接收邮件补给哦！');
+        return;
+      }
+      localStorage.setItem('fe_player_uid', input);
+      document.getElementById('uid-modal-overlay').style.display = 'none';
+      updateUIDDisplay(input);
+      // 触发一次拉取
+      fetchAndRestoreCloud(input);
+    }
+
+    async function fetchAndRestoreCloud(uid) {
+      if (!uid) return;
+      try {
+        var res = await fetch('/api/sync?uid=' + encodeURIComponent(uid));
+        var json = await res.json();
+        if (json.ok && json.roleData) {
+          localStorage.setItem('fe_saved_role_v1', typeof json.roleData === 'string' ? json.roleData : JSON.stringify(json.roleData));
+          console.log('[cloud-sync] 云端存档拉取成功');
+        }
+        if (json.ok && json.newMails && json.newMails.length > 0) {
+          window.__pendingCloudMails = json.newMails;
+          window.__updateMailBadge(json.newMails.length);
+        }
+      } catch (e) {
+        console.warn('[cloud-sync] 拉取失败:', e);
+      }
+    }
+
+    // 初始化检查 UID
+    (function initUser() {
+      var uid = getStoredUID();
+      if (uid) {
+        updateUIDDisplay(uid);
+        fetchAndRestoreCloud(uid);
+      } else {
+        // 延时 300ms 弹出模态框让用户输入
+        setTimeout(function () {
+          var overlay = document.getElementById('uid-modal-overlay');
+          if (overlay) overlay.style.display = 'flex';
+        }, 300);
+      }
+    })();
+  </script>
 
   <!-- GM 开发者快速调试工具条 -->
   <div id="gm-toolbar">

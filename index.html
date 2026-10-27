@@ -168,9 +168,9 @@
   <div id="uid-modal-overlay">
     <div class="uid-modal-card">
       <h3>🪿 欢迎来到肥鹅健身房</h3>
-      <p>请输入您的专属测试昵称或编号，您的进度和信箱道具将实时同步到云端：</p>
-      <input type="text" id="uid-input" placeholder="例如: 1001 或 娟娟" onkeydown="if(event.key==='Enter')confirmPlayerUID(event)">
-      <button onclick="confirmPlayerUID(event)" ontouchend="confirmPlayerUID(event)">进入游戏</button>
+      <p>检测到您的专属测试账号，点击即可进入游戏，您的进度和信箱道具将实时同步到云端：</p>
+      <input type="text" id="uid-input" value="1001" placeholder="例如: 1001 或 娟娟" oninput="window.__tempUID = this.value" onkeydown="if(event.key==='Enter')confirmPlayerUID(event)">
+      <button type="button" onclick="confirmPlayerUID(event)">进入游戏</button>
     </div>
   </div>
 
@@ -230,17 +230,18 @@
         try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
       }
       var inputEl = document.getElementById('uid-input');
-      var input = inputEl ? inputEl.value.trim() : '';
+      var val = (inputEl ? inputEl.value : '') || window.__tempUID || '';
+      var input = val.trim();
+      // 如果完全没填，自动兜底赋予默认编号，绝对不弹窗报错卡死玩家
       if (!input) {
-        alert('请输入昵称或编号，方便接收邮件补给哦！');
-        return;
+        input = '1001';
       }
       try { localStorage.setItem('fe_player_uid', input); } catch (err) {}
       var overlay = document.getElementById('uid-modal-overlay');
       if (overlay) {
         overlay.style.setProperty('display', 'none', 'important');
         overlay.style.pointerEvents = 'none';
-        try { overlay.remove(); } catch (err) {} // 直接从 DOM 彻底移除，绝不可能再挡在前面
+        try { overlay.remove(); } catch (err) {} // 彻底物理移除
       }
       updateUIDDisplay(input);
       fetchAndRestoreCloud(input);

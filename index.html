@@ -26,8 +26,9 @@
       z-index: 1;
       touch-action: none;
     }
-    /* 极简侧边隐藏式开发者工具 (平时只露出边缘小药丸，点击滑出) */
+    /* 外部 DOM GM 默认隐藏，功能完全整合至肥鹅原生侧边栏小箭头 GM 工具中 */
     #gm-toolbar {
+      display: none !important;
       position: fixed; top: 20%; right: 0; z-index: 999999;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size: 13px; color: #fff;
@@ -398,13 +399,6 @@
     // 告警洪水治理:拦截 game.js 里残留的 ">>>" 资源加载调试日志(排查期注入的),
     // 每次刷新数千条黄色警告会淹没真问题;URL 带 ?debug 可恢复全部输出
     window.__DEBUG__ = /[?&]debug/.test(location.search);
-    (function () {
-      var nativeWarn = console.warn;
-      console.warn = function () {
-        if (!window.__DEBUG__ && typeof arguments[0] === 'string' && arguments[0].indexOf('>>>') === 0) return;
-        return nativeWarn.apply(console, arguments);
-      };
-    })();
 
     // 页面内日志(尽量健壮:先存数组,再尝试写 DOM)
     var __logs = [];

@@ -2626,7 +2626,9 @@
           mpV2Size: 0,
           mpV2Items: new Map()
         },
-        tutorialOrder: new Map(),
+        tutorialOrder: new Map([
+          ['Vegetable_1', [1001201, 1001201, 1001201, 1001201, 1001201, 1001301]]
+        ]),
         seriesInitOrder: new Map(),
         deterioratedInit: new Map(),
         energyEnd: 0,
@@ -2654,6 +2656,11 @@
         b1.cells = createBoard1Cells();
       }
       if (!b1.buff) b1.buff = new Map();
+      if (!b1.tutorialOrder || !(b1.tutorialOrder instanceof Map) || b1.tutorialOrder.size === 0) {
+        b1.tutorialOrder = new Map([
+          ['Vegetable_1', [1001201, 1001201, 1001201, 1001201, 1001201, 1001301]]
+        ]);
+      }
     }
     if (!role.energy || !role.energy.valueMax) {
       role.energy = {
@@ -5307,6 +5314,105 @@
           };
         }
       } catch (e) {}
+
+      // 增强肥鹅原版 GM 工具按钮字号与账号功能注入
+      try {
+        var extraBtnCls = cc.js && cc.js.getClassByName && cc.js.getClassByName('ExtraGmBtn');
+        if (extraBtnCls && extraBtnCls.prototype && !extraBtnCls.prototype.__boostHooked) {
+          extraBtnCls.prototype.__boostHooked = true;
+          var origOnData = extraBtnCls.prototype.onData;
+          extraBtnCls.prototype.onData = function () {
+            origOnData.apply(this, arguments);
+            var lbl = this.node && this.node.getComponentInChildren(cc.Label);
+            if (lbl) {
+              lbl.fontSize = 24;
+              lbl.lineHeight = 28;
+            }
+          };
+        }
+
+        var extraGmCls = cc.js && cc.js.getClassByName && cc.js.getClassByName('ExtraGmTool');
+        if (extraGmCls && extraGmCls.prototype && !extraGmCls.prototype.__accountHooked) {
+          extraGmCls.prototype.__accountHooked = true;
+          var origInitGmList = extraGmCls.prototype.initGmList;
+          extraGmCls.prototype.initGmList = function (searchKey) {
+            origInitGmList.apply(this, arguments);
+            var currentData = this.list && this.list.data;
+            if (Array.isArray(currentData)) {
+              var accountItems = [
+                {
+                  name: '【切换账号 UID】',
+                  flag: '账号',
+                  level: 9999,
+                  color: cc.v3(242, 107, 29),
+                  helpText: '在上方【对象ID】输入框输入目标 UID，点击直接切换账号',
+                  func: function (paramId) {
+                    var uid = (paramId || '').trim();
+                    if (!uid) {
+                      if (window.c3) window.c3.Alert({ title: '切换账号', content: '请先在上方【对象ID】输入框中输入目标账号 UID（例如 1002）' });
+                      return;
+                    }
+                    var url = new URL(location.href);
+                    url.searchParams.set('uid', uid);
+                    location.href = url.toString();
+                  }
+                },
+                {
+                  name: '【修改角色昵称】',
+                  flag: '账号',
+                  level: 9998,
+                  color: cc.v3(56, 189, 248),
+                  helpText: '在上方【对象ID】输入框输入新昵称，点击保存生效',
+                  func: function (paramName) {
+                    var name = (paramName || '').trim();
+                    if (!name) {
+                      if (window.c3) window.c3.Alert({ title: '修改昵称', content: '请先在上方【对象ID】输入框中输入新昵称' });
+                      return;
+                    }
+                    var role = window._user_mgr_ && window._user_mgr_.role;
+                    if (role) {
+                      role.name = name;
+                      if (window.saveNow) window.saveNow();
+                      if (window.c3) window.c3.Toast({ title: '昵称已修改为: ' + name });
+                    }
+                  }
+                },
+                {
+                  name: '【重置当前账号】',
+                  flag: '账号',
+                  level: 9997,
+                  color: cc.v3(239, 68, 68),
+                  helpText: '清空当前 UID 进度，全新重新开始第一天',
+                  func: function () {
+                    if (window.c3) {
+                      window.c3.Alert({
+                        title: '重置确认',
+                        content: '确定要清空当前账号并重新开始游戏吗？',
+                        confirm: function () {
+                          if (window.resetGameProgress) window.resetGameProgress();
+                        }
+                      });
+                    }
+                  }
+                }
+              ];
+
+              var filterKey = (searchKey || '').trim();
+              var matchItems = accountItems;
+              if (filterKey) {
+                matchItems = accountItems.filter(function (it) {
+                  return it.name.indexOf(filterKey) >= 0 || it.flag.indexOf(filterKey) >= 0;
+                });
+              }
+
+              this.list.data = matchItems.concat(currentData);
+            }
+          };
+          console.log('[GM] ExtraGmTool 账号管理工具已成功挂载！');
+        }
+      } catch (e) {
+        console.warn('[GM] 注入 ExtraGmTool 失败:', e);
+      }
 
       return true;
     }

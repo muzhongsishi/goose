@@ -30,6 +30,7 @@
       model: 'Browser',
       brand: 'devtools',
       pixelRatio: dpr,
+      devicePixelRatio: dpr,
       windowWidth: global.innerWidth,
       windowHeight: global.innerHeight,
       screenWidth: global.innerWidth,

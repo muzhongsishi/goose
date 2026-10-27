@@ -5197,21 +5197,21 @@
       }
     };
 
-    // ===== 详情说明与对话字体智能放大增强 =====
+    // ===== 详情说明与对话字体智能高清放大增强 =====
     var isTargetNode = function (node) {
       if (!node || !node.name) return false;
       var n = node.name.toLowerCase();
-      if (n === 'label_desc' || n === 'explain' || n === 'label_info' || n === 'label_from' ||
-          n === 'label_special' || n === 'label_dialogue' || n === 'explain_label' || n === 'desc') {
+      if (n.includes('desc') || n.includes('explain') || n.includes('info') || n.includes('dialogue') ||
+          n.includes('narrative') || n.includes('talk') || n.includes('bubble') || n.includes('content') ||
+          n === 'label_from' || n === 'label_special') {
         return true;
       }
       var p = node.parent;
       while (p) {
         var pn = p.name ? p.name.toLowerCase() : '';
-        if (pn.includes('elementinfo') || pn.includes('elementdetail') || pn.includes('narrative') || pn.includes('tip')) {
-          if (n === 'label_desc' || n === 'explain' || n === 'txt' || n === 'label_from') {
-            return true;
-          }
+        if (pn.includes('elementinfo') || pn.includes('elementdetail') || pn.includes('narrative') ||
+            pn.includes('guidetalk') || pn.includes('dialogue') || pn.includes('bubble')) {
+          return true;
         }
         p = p.parent;
       }
@@ -5219,12 +5219,49 @@
     };
 
     var boostLabel = function (lbl) {
-      // 保持原版 Label 属性，完全不破坏预制体内部的尺寸与层级结构
+      if (!lbl || !lbl.node || !lbl.node.name) return;
+      var n = lbl.node.name.toLowerCase();
+      var str = lbl.string ? String(lbl.string) : '';
+      var hasChinese = /[\u4e00-\u9fa5]/.test(str);
+
+      if (n === 'label_info' || n === 'name') {
+        if (lbl.fontSize < 36) {
+          lbl.fontSize = 36;
+          lbl.lineHeight = 40;
+        }
+      } else if (n.includes('desc') || n.includes('explain')) {
+        if (lbl.fontSize < 28) {
+          lbl.fontSize = 28;
+          lbl.lineHeight = 34;
+        }
+        lbl.overflow = cc.Label.Overflow.RESIZE_HEIGHT;
+        lbl.enableWrapText = true;
+      } else if (hasChinese && str.length >= 4) {
+        // 通用剧情对话、气泡说明、任务提示文字保底
+        if (lbl.fontSize < 26) {
+          lbl.fontSize = 26;
+          lbl.lineHeight = Math.max(lbl.lineHeight, 32);
+        }
+      }
     };
 
-    // 1. 拦截 cc.Label.prototype.string 与 onLoad，彻底净化 Debug 标签
+    // 1. 拦截 cc.Label.prototype.string 与 onLoad，彻底净化 Debug 标签并增强字体
     function hookLabel() {
       if (typeof cc === 'undefined' || !cc.Label || !cc.Label.prototype) return false;
+
+      // 文本防萎缩保底：防止 SHRINK 模式把文字暴力压缩成看不清的微缩字
+      if (cc.Label.prototype._calculateShrinkFont && !cc.Label.prototype.__origCalculateShrinkFont) {
+        cc.Label.prototype.__origCalculateShrinkFont = cc.Label.prototype._calculateShrinkFont;
+        cc.Label.prototype._calculateShrinkFont = function (str) {
+          var res = this.__origCalculateShrinkFont(str);
+          var minSize = Math.max(Math.floor(this.fontSize * 0.75), 24);
+          if (this.actualFontSize < minSize) {
+            this.actualFontSize = minSize;
+          }
+          return res;
+        };
+      }
+
       var origStringDesc = Object.getOwnPropertyDescriptor(cc.Label.prototype, 'string');
       if (origStringDesc && origStringDesc.set && !cc.Label.prototype.__debugHooked) {
         cc.Label.prototype.__debugHooked = true;
@@ -5236,11 +5273,41 @@
               this.node.opacity = 0;
               return origStringDesc.set.call(this, '');
             }
-            return origStringDesc.set.call(this, val);
+            var ret = origStringDesc.set.call(this, val);
+            if (this.node && isTargetNode(this.node)) {
+              boostLabel(this);
+            }
+            return ret;
           },
           configurable: true
         });
       }
+
+      // 针对 ElementInfo 与 ElementDetailWindow 原型注入
+      try {
+        var elInfoCls = cc.js && cc.js.getClassByName && cc.js.getClassByName('ElementInfo');
+        if (elInfoCls && elInfoCls.prototype && !elInfoCls.prototype.__boostHooked) {
+          elInfoCls.prototype.__boostHooked = true;
+          var origShowInfo = elInfoCls.prototype.showElementInfo;
+          elInfoCls.prototype.showElementInfo = function (e, t) {
+            var res = origShowInfo.apply(this, arguments);
+            try {
+              if (this.label_info) {
+                this.label_info.fontSize = 38;
+                this.label_info.lineHeight = 42;
+              }
+              if (this.label_desc) {
+                this.label_desc.fontSize = 28;
+                this.label_desc.lineHeight = 34;
+                this.label_desc.overflow = cc.Label.Overflow.RESIZE_HEIGHT;
+                this.label_desc.enableWrapText = true;
+              }
+            } catch (err) {}
+            return res;
+          };
+        }
+      } catch (e) {}
+
       return true;
     }
 

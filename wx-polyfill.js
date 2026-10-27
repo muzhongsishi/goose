@@ -74,42 +74,23 @@
       c.style.touchAction = 'none';
       c.style.zIndex = '1';
       c._isMainCanvas = true;
-      // 手机竖屏框架配合(index.html 样式表把画布限制为 390:844 最大内接矩形):
-      // weapp-adapter 的 canvas 工厂会给主 canvas 挂假 getBoundingClientRect
-      //(恒返回整个视口 innerWidth/innerHeight)——Cocos 的设计分辨率适配与触摸
-      //坐标换算(cc.view._updateCanvasBoundingRect / convertToUI)都吃它,宽屏下
-      //会被骗成横屏满屏。这里用 getter/setter 代理一劳永逸:adapter 事后赋值
-      //覆盖走我们的 set(静默忽略),任何时刻读取都是真实内接矩形(公式与
-      //index.html 的 min() 一字不差)。
-      var getViewportSize = function () {
-        var mode = (typeof localStorage !== 'undefined' && localStorage.getItem('__game_viewport_mode__')) || 'comfortable';
-        var map = {
-          compact: { w: 390, h: 844 },
-          comfortable: { w: 520, h: 924 },
-          large: { w: 640, h: 1138 },
-          native: { w: 750, h: 1334 }
-        };
-        return map[mode] || map.comfortable;
-      };
-      var realRect = function () {
-        var vp = getViewportSize();
-        // 真实视口必须读 documentElement.clientWidth——innerWidth 已被
-        //index.html 的竖屏覆盖挡住(读回来是内接宽),用它算居中偏移恒得 0,
-        //与真实视觉位置(居中时≠0)不符,点击整体错位(实测踩坑)
-        var de = nativeDoc && nativeDoc.documentElement;
-        var vw = (de && de.clientWidth) || global.innerWidth, vh = (de && de.clientHeight) || global.innerHeight;
-        var w = Math.min(vw, vh * vp.w / vp.h);
-        var h = Math.min(vh, vw * vp.h / vp.w);
-        var l = 0, t = 0; // 画布贴左上角(index.html),left/top 恒 0
-        return { x: l, y: t, left: l, top: t, right: l + w, bottom: t + h, width: w, height: h };
+      var nativeGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+      var getCanvasRect = function () {
+        var r = nativeGetBoundingClientRect.call(c);
+        if (!r || (r.width === 0 && r.height === 0)) {
+          var w = global.innerWidth || 390;
+          var h = global.innerHeight || 844;
+          return { x: 0, y: 0, left: 0, top: 0, right: w, bottom: h, width: w, height: h };
+        }
+        return r;
       };
       try {
         Object.defineProperty(c, 'getBoundingClientRect', {
           configurable: true,
-          get: function () { return realRect; },
-          set: function () { /* adapter 的假 rect 覆盖到此为止 */ }
+          get: function () { return getCanvasRect; },
+          set: function () { /* 保护真实 DOM 物理包围盒，防止被 adapter 覆盖 */ }
         });
-      } catch (e) { tr('getBoundingClientRect 代理安装失败(退化为 adapter 假 rect):', e && e.message); }
+      } catch (e) { tr('getBoundingClientRect 代理安装失败:', e && e.message); }
       if (nativeDoc.body) nativeDoc.body.appendChild(c);
       else nativeDoc.addEventListener('DOMContentLoaded', function () { nativeDoc.body.appendChild(c); });
     }

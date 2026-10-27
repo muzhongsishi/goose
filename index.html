@@ -66,6 +66,15 @@
     }
     #gm-panel button:hover { opacity: 0.9; }
     #gm-panel button:active { transform: scale(0.97); }
+        .btn-sm {
+      padding: 3px 6px !important;
+      font-size: 11px !important;
+      border-radius: 4px !important;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+    }
     #gm-panel button.btn-warn {
       background: linear-gradient(135deg, #e53935 0%, #e35d5b 100%);
     }
@@ -102,16 +111,41 @@
   <div id="game-container"></div>
   <div id="log"></div>
 
-  <!-- 侧边隐藏式开发者工具 (平时只露小药丸，点击滑出，UID收纳在内) -->
+  <!-- 侧边隐藏式开发者工具 (平时只露小药丸，点击滑出，账号与昵称清晰区分) -->
   <div id="gm-toolbar">
     <div id="gm-toggle" onclick="toggleGM()">⚡️ GM 调试</div>
     <div id="gm-panel" class="collapsed">
       <div class="user-info-box">
+        <!-- 账号 UID 独立行 -->
         <div class="user-info-row">
-          <span style="color:#94a3b8;">测试 UID:</span>
-          <b id="player-uid-display" style="color:#f26b1d;">1001</b>
-          <a href="javascript:void(0)" onclick="promptChangeUID()" style="color:#38bdf8;text-decoration:none;font-size:11px;">[切换/改名]</a>
+          <span style="color:#94a3b8;">账号 UID:</span>
+          <b id="player-uid-display" style="color:#f26b1d;font-size:13px;">1001</b>
+          <button type="button" class="btn-sm" onclick="toggleSwitchUidForm()">切换账号</button>
         </div>
+        <div id="switch-uid-form" style="display:none;margin-top:2px;padding:6px;background:rgba(0,0,0,0.35);border-radius:6px;">
+          <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">输入目标 UID (加载独立云存档):</div>
+          <div style="display:flex;gap:4px;">
+            <input id="input-switch-uid" type="text" placeholder="如 1002" style="flex:1;min-width:0;background:#0f172a;border:1px solid #334155;color:#fff;padding:4px 6px;border-radius:4px;font-size:12px;">
+            <button type="button" class="btn-sm btn-primary" onclick="confirmSwitchUID()">切换</button>
+            <button type="button" class="btn-sm" onclick="toggleSwitchUidForm(false)">取消</button>
+          </div>
+        </div>
+
+        <!-- 角色昵称 独立行 -->
+        <div class="user-info-row">
+          <span style="color:#94a3b8;">角色昵称:</span>
+          <b id="player-name-display" style="color:#38bdf8;font-size:12px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">肥鹅小厨</b>
+          <button type="button" class="btn-sm" onclick="toggleRenameForm()">修改昵称</button>
+        </div>
+        <div id="rename-form" style="display:none;margin-top:2px;padding:6px;background:rgba(0,0,0,0.35);border-radius:6px;">
+          <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">输入新昵称 (不影响进度):</div>
+          <div style="display:flex;gap:4px;">
+            <input id="input-new-name" type="text" placeholder="新名字" style="flex:1;min-width:0;background:#0f172a;border:1px solid #334155;color:#fff;padding:4px 6px;border-radius:4px;font-size:12px;">
+            <button type="button" class="btn-sm btn-primary" onclick="confirmRename()">保存</button>
+            <button type="button" class="btn-sm" onclick="toggleRenameForm(false)">取消</button>
+          </div>
+        </div>
+
         <div class="user-info-row">
           <span style="color:#94a3b8;">云端状态:</span>
           <span id="sync-status-text" style="color:#4ade80;">☁️ 已连接</span>
@@ -126,6 +160,14 @@
   </div>
 
   <script>
+    // 在任何 adapter 加载前锁定原生 DOM 操作引用
+    window.__nativeGetElementById = document.getElementById.bind(document);
+    window.__nativeQuerySelector = document.querySelector.bind(document);
+    function getDom(id) {
+      return (window.__nativeGetElementById || document.getElementById.bind(document))(id);
+    }
+    window.getDom = getDom;
+
     function getStoredUID() {
       var uid = localStorage.getItem('fe_player_uid');
       if (!uid || !uid.trim()) {
@@ -135,14 +177,14 @@
       return uid;
     }
     function updateUIDDisplay(uid) {
-      var el = document.getElementById('player-uid-display');
+      var el = getDom('player-uid-display');
       if (el) el.innerText = uid || '1001';
     }
     window.getCurrentPlayerUID = function () {
       return getStoredUID();
     };
     window.__updateCloudSyncStatus = function (status) {
-      var txt = document.getElementById('sync-status-text');
+      var txt = getDom('sync-status-text');
       if (!txt) return;
       if (status === 'syncing') {
         txt.innerText = '☁️ 同步中...';
@@ -154,81 +196,74 @@
         txt.innerText = '同步异常';
       }
     };
-    function promptChangeUID() {
-      var cur = getStoredUID();
-      var input = prompt('请输入新的测试 UID / 昵称 (更换后将自动从云端加载对应的存档):', cur);
-      if (input !== null && input.trim()) {
-        localStorage.setItem('fe_player_uid', input.trim());
-        updateUIDDisplay(input.trim());
-        location.reload();
+    function toggleSwitchUidForm(show) {
+      var f = getDom('switch-uid-form');
+      if (!f) return;
+      if (show === undefined) show = f.style.display === 'none';
+      f.style.display = show ? 'block' : 'none';
+      if (show) {
+        var inp = getDom('input-switch-uid');
+        if (inp) { inp.value = getStoredUID(); inp.focus(); }
       }
     }
-
-    async function fetchAndRestoreCloud(uid) {
-      if (!uid) return;
-      try {
-        var res = await fetch('/api/sync?uid=' + encodeURIComponent(uid));
-        var json = await res.json();
-        if (json.ok && json.roleData) {
-          localStorage.setItem('fe_saved_role_v1', typeof json.roleData === 'string' ? json.roleData : JSON.stringify(json.roleData));
-          console.log('[cloud-sync] 云端存档拉取成功');
-        }
-        if (json.ok && json.newMails && json.newMails.length > 0) {
-          window.__pendingCloudMails = json.newMails;
-        }
-      } catch (e) {
-        console.warn('[cloud-sync] 拉取失败:', e);
-      }
-    }
-
-    (function initUser() {
-      var uid = getStoredUID();
+    function confirmSwitchUID() {
+      var inp = getDom('input-switch-uid');
+      var uid = (inp && inp.value || '').trim();
+      if (!uid) { alert('请输入有效 UID'); return; }
+      localStorage.setItem('fe_player_uid', uid);
       updateUIDDisplay(uid);
-      fetchAndRestoreCloud(uid);
-    })();
-  </script>
+      location.reload();
+    }
 
-  <script>
-    function getRealEl(id) {
-      if (window.__realGetElementById) return window.__realGetElementById(id);
-      return document.getElementById(id);
-    }
-    var VIEWPORT_MAP = {
-      compact: { w: 390, h: 844 },
-      comfortable: { w: 520, h: 924 },
-      large: { w: 640, h: 1138 },
-      native: { w: 750, h: 1334 }
-    };
-    function applyViewportMode(mode) {
-      var vp = VIEWPORT_MAP[mode] || VIEWPORT_MAP.comfortable;
-      var root = (window.__realGetElementById ? window.__realGetElementById('game-container') : null) || document.documentElement;
-      if (document.documentElement && document.documentElement.style) {
-        document.documentElement.style.setProperty('--game-viewport-w', vp.w);
-        document.documentElement.style.setProperty('--game-viewport-h', vp.h);
-      }
-      var sel = getRealEl('viewport-select');
-      if (sel) sel.value = mode;
-      if (window.cc && window.cc.view && window.cc.view._resizeEvent) {
-        window.cc.view._resizeEvent();
+    function toggleRenameForm(show) {
+      var f = getDom('rename-form');
+      if (!f) return;
+      if (show === undefined) show = f.style.display === 'none';
+      f.style.display = show ? 'block' : 'none';
+      if (show) {
+        var inp = getDom('input-new-name');
+        var curName = getStoredNickname();
+        if (inp) { inp.value = curName; inp.focus(); }
       }
     }
-    window.setGameViewport = function (mode) {
-      localStorage.setItem('__game_viewport_mode__', mode);
-      applyViewportMode(mode);
-      var st = getRealEl('gm-status');
-      if (st) st.textContent = '已应用视口: ' + (VIEWPORT_MAP[mode] ? VIEWPORT_MAP[mode].w + 'px' : mode);
-    };
-    // 启动初始载入保存的视口尺寸
-    var initMode = (typeof localStorage !== 'undefined' && localStorage.getItem('__game_viewport_mode__')) || 'comfortable';
-    applyViewportMode(initMode);
+    function getStoredNickname() {
+      if (window.role && window.role.userInfo && (window.role.userInfo.nickName || window.role.userInfo.name)) {
+        return window.role.userInfo.nickName || window.role.userInfo.name;
+      }
+      return localStorage.getItem('fe_player_nickname') || '肥鹅小厨';
+    }
+    function updateNicknameDisplay(name) {
+      var el = getDom('player-name-display');
+      if (el) el.innerText = name || '肥鹅小厨';
+    }
+    function confirmRename() {
+      var inp = getDom('input-new-name');
+      var name = (inp && inp.value || '').trim();
+      if (!name) { alert('请输入有效昵称'); return; }
+      localStorage.setItem('fe_player_nickname', name);
+      if (window.role && window.role.userInfo) {
+        window.role.userInfo.name = name;
+        window.role.userInfo.nickName = name;
+      }
+      updateNicknameDisplay(name);
+      toggleRenameForm(false);
+      var st = getDom('gm-status');
+      if (st) st.textContent = '昵称已保存为: ' + name;
+      if (window.__triggerCloudSave) window.__triggerCloudSave();
+    }
+    window.updateNicknameDisplay = updateNicknameDisplay;
+    window.confirmRename = confirmRename;
+    window.toggleRenameForm = toggleRenameForm;
+    window.confirmSwitchUID = confirmSwitchUID;
+    window.toggleSwitchUidForm = toggleSwitchUidForm;
 
     function toggleGM() {
-      var p = getRealEl('gm-panel');
+      var p = getDom('gm-panel');
       if (p) p.classList.toggle('collapsed');
     }
     window.toggleGM = toggleGM;
     window.__gmSkipComic = function () {
-      var st = getRealEl('gm-status');
+      var st = document.getElementById('gm-status');
       var w = cc.find("Canvas/UIRoot/WINDOW/ComicWindow_0_OPEN");
       if (w && w.getComponent("ComicWindow")) {
         var comp = w.getComponent("ComicWindow");
@@ -242,7 +277,7 @@
       }
     };
     window.__gmGoToMainBoard = function () {
-      var st = getRealEl('gm-status');
+      var st = document.getElementById('gm-status');
       if (st) st.textContent = '正在进入主大棋盘...';
       if (window.C3 && window.Ci) {
         try { window.C3.SwitchTo(window.Ci.MergeScreen); } catch(e){}
@@ -289,7 +324,7 @@
     // 仅增加钻石(不碰金币)
     window.__gmAddDiamond = function (amount) {
       var num = Number(amount) || 1000;
-      var st = getRealEl('gm-status');
+      var st = document.getElementById('gm-status');
       var r = window._user_mgr_ && window._user_mgr_.role;
       if (!r) { if (st) st.textContent = 'role 未就绪'; return; }
       r.diamond = (r.diamond || 0) + num;
@@ -301,7 +336,7 @@
 
     // 仅恢复体力
     window.__gmRefillEnergy = function () {
-      var st = getRealEl('gm-status');
+      var st = document.getElementById('gm-status');
       var r = window._user_mgr_ && window._user_mgr_.role;
       if (!r) { if (st) st.textContent = 'role 未就绪'; return; }
       if (r.energy && r.energy.valueMax) {
@@ -320,7 +355,7 @@
 
     // 一键瞬间完成做菜 (所有锅里的菜立即熟透)
     window.__gmInstantCook = function () {
-      var st = getRealEl('gm-status');
+      var st = document.getElementById('gm-status');
       var r = window._user_mgr_ && window._user_mgr_.role;
       if (!r || !r.boards) { if (st) st.textContent = 'role 未就绪'; return; }
       var b = r.boards.get ? r.boards.get(1) : r.boards[1] || r.boards[0];
@@ -403,49 +438,6 @@
     });
   </script>
 
-  <!-- 0. 手机竖屏视口尺寸:必须最早执行(wx-polyfill 的 getSystemInfoSync、weapp-adapter
-       的 inputManager、Cocos 引擎的画布位图/设计分辨率全都读 window.innerWidth/innerHeight,
-       而布局上画布已被 CSS 限制为 390:844 内接矩形——不覆盖的话游戏仍按整个视口的
-       横屏尺寸建位图,内容被挤扁进竖条)。覆盖成只读 getter,动态返回内接矩形尺寸,
-       公式与 CSS 的 min() 一字不差;CSS 布局本身不读 JS 属性,不受影响;真机竖屏视口
-       ≈内接矩形,取值与原值一致零影响 -->
-  <script>
-    (function () {
-      function getViewportSize() {
-        var mode = (typeof localStorage !== 'undefined' && localStorage.getItem('__game_viewport_mode__')) || 'comfortable';
-        var map = {
-          compact: { w: 390, h: 844 },
-          comfortable: { w: 520, h: 924 },
-          large: { w: 640, h: 1138 },
-          native: { w: 750, h: 1334 }
-        };
-        return map[mode] || map.comfortable;
-      }
-      var realInnerW = window.innerWidth, realInnerH = window.innerHeight;
-      function portW() {
-        var vp = getViewportSize();
-        return Math.min(realInnerW, Math.floor(realInnerH * vp.w / vp.h));
-      }
-      function portH() {
-        var vp = getViewportSize();
-        return Math.min(realInnerH, Math.floor(realInnerW * vp.h / vp.w));
-      }
-      try {
-        Object.defineProperty(window, 'innerWidth', { configurable: true, get: portW });
-        Object.defineProperty(window, 'innerHeight', { configurable: true, get: portH });
-        // 真实视口变化跟踪:innerWidth 已被本覆盖挡住,改轮询 documentElement.clientWidth
-        // (CSS 布局尺寸不受 JS 属性覆盖影响,始终反映真实视口;adapter 可能替换
-        // document,读到的值做 >0 防御,防止把 undefined 塞进闭包)
-        setInterval(function () {
-          var de = document.documentElement;
-          var cw = de && de.clientWidth, ch = de && de.clientHeight;
-          if (cw > 0 && ch > 0 && (cw !== realInnerW || ch !== realInnerH)) {
-            realInnerW = cw; realInnerH = ch;
-          }
-        }, 500);
-      } catch (e) { console.error('[viewport] innerWidth 覆盖失败:', e && e.message); }
-    })();
-  </script>
 
   <!-- 1. AMD loader -->
   <script src="loader.js"></script>

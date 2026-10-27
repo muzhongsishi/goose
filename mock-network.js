@@ -5322,9 +5322,21 @@
         }
       } catch (e) {}
 
-      // 增强肥鹅原版 GM 工具按钮字号与账号功能注入
-      try {
-        var extraBtnCls = cc.js && cc.js.getClassByName && cc.js.getClassByName('ExtraGmBtn');
+      return true;
+    }
+
+    // 专属保障：肥鹅原版 GM 工具精简与美化（带定时轮询与点击小箭头拦截双保险）
+    function applyExtraGmToolHook() {
+      if (typeof cc === 'undefined' || !cc.js || !cc.js.getClassByName) return false;
+
+      var extraGmCls = cc.js.getClassByName('ExtraGmTool');
+      if (!extraGmCls || !extraGmCls.prototype) return false;
+
+      if (!extraGmCls.prototype.__accountHooked) {
+        extraGmCls.prototype.__accountHooked = true;
+
+        // 1. 放大按钮字号
+        var extraBtnCls = cc.js.getClassByName('ExtraGmBtn');
         if (extraBtnCls && extraBtnCls.prototype && !extraBtnCls.prototype.__boostHooked) {
           extraBtnCls.prototype.__boostHooked = true;
           var origOnData = extraBtnCls.prototype.onData;
@@ -5332,222 +5344,243 @@
             origOnData.apply(this, arguments);
             var lbl = this.node && this.node.getComponentInChildren(cc.Label);
             if (lbl) {
-              lbl.fontSize = 24;
-              lbl.lineHeight = 28;
+              lbl.fontSize = 22;
+              lbl.lineHeight = 26;
             }
           };
         }
 
-        var extraGmCls = cc.js && cc.js.getClassByName && cc.js.getClassByName('ExtraGmTool');
-        if (extraGmCls && extraGmCls.prototype && !extraGmCls.prototype.__accountHooked) {
-          extraGmCls.prototype.__accountHooked = true;
-          var origInitGmList = extraGmCls.prototype.initGmList;
-          extraGmCls.prototype.initGmList = function (searchKey) {
-            // 美化面板尺寸：紧凑优雅，消除原本 1200px 的过长空白
-            try {
-              if (this.node) {
-                this.node.height = 560;
-                if (this.node.parent) this.node.parent.height = 620;
-              }
-              if (this.list && this.list.node) {
-                this.list.node.height = 430;
-                if (this.list.node.parent) this.list.node.parent.height = 430;
-              }
-              // 隐藏冗余的原版历史翻页按键
-              ['searchHistoryUpBtn', 'searchHistoryDownBtn', 'paramHistoryUpBtn', 'paramHistoryDownBtn'].forEach(function (btnName) {
-                var btn = cc.find(btnName, this.node);
-                if (btn) btn.active = false;
-              }, this);
-            } catch (err) {}
-
-            var role = window._user_mgr_ && window._user_mgr_.role;
-
-            // 仅保留用户需要的核心调试工具，完全剔除原版 200+ 杂项
-            var customTools = [
-              {
-                name: '【切换账号 UID】',
-                flag: '账号',
-                level: 9999,
-                color: cc.v3(245, 158, 11), // 温暖琥珀橙
-                helpText: '在上方【对象ID】输入目标 UID（例如 1002），点击切换',
-                func: function (paramId) {
-                  var uid = (paramId || (this.idEdit && this.idEdit.string) || '').trim();
-                  if (!uid) {
-                    if (window.c3) window.c3.Alert({ title: '切换账号', content: '请先在上方【对象ID】输入框中输入目标账号 UID（例如 1002）' });
-                    return;
-                  }
-                  var url = new URL(location.href);
-                  url.searchParams.set('uid', uid);
-                  location.href = url.toString();
-                }
-              },
-              {
-                name: '【修改角色昵称】',
-                flag: '账号',
-                level: 9998,
-                color: cc.v3(59, 130, 246), // 亮蓝
-                helpText: '在上方【对象ID】输入新昵称，点击保存生效',
-                func: function (paramName) {
-                  var name = (paramName || (this.idEdit && this.idEdit.string) || '').trim();
-                  if (!name) {
-                    if (window.c3) window.c3.Alert({ title: '修改昵称', content: '请先在上方【对象ID】输入框中输入新昵称' });
-                    return;
-                  }
-                  if (role) {
-                    role.name = name;
-                    if (window.saveNow) window.saveNow();
-                    if (window.c3) window.c3.Toast({ title: '昵称已修改为: ' + name });
-                  }
-                }
-              },
-              {
-                name: '【设置游戏天数】',
-                flag: '进度',
-                level: 9997,
-                color: cc.v3(16, 185, 129), // 翡翠绿
-                helpText: '在上方【对象ID】输入目标天数（如 1、2、3），点击跳转',
-                func: function (paramDays) {
-                  var days = parseInt((paramDays || (this.idEdit && this.idEdit.string) || '').trim(), 10);
-                  if (isNaN(days) || days < 1) {
-                    if (window.c3) window.c3.Alert({ title: '设置天数', content: '请在上方【对象ID】输入正整数天数（例如 1 或 2）' });
-                    return;
-                  }
-                  if (role) {
-                    role.days = days;
-                    if (role.day !== undefined) role.day = days;
-                    if (window.saveNow) window.saveNow();
-                    if (window.c3) window.c3.Toast({ title: '游戏天数已设置为第 ' + days + ' 天' });
-                  }
-                }
-              },
-              {
-                name: '【一键补满体力】',
-                flag: '资源',
-                level: 9996,
-                color: cc.v3(234, 179, 8), // 亮黄
-                helpText: '点击为角色恢复 100 点满额体力',
-                func: function () {
-                  if (role && role.energy) {
-                    role.energy.value = Math.max(100, role.energy.valueMax || 100);
-                    if (window.saveNow) window.saveNow();
-                    if (window.c3) window.c3.Toast({ title: '体力已补满至 ' + role.energy.value });
-                  }
-                }
-              },
-              {
-                name: '【增加金币钻石】',
-                flag: '资源',
-                level: 9995,
-                color: cc.v3(168, 85, 247), // 紫色
-                helpText: '点击获得 10000 金币 + 1000 钻石',
-                func: function () {
-                  if (role) {
-                    role.coin = (role.coin || 0) + 10000;
-                    role.diamond = (role.diamond || 0) + 1000;
-                    if (window.saveNow) window.saveNow();
-                    if (window.c3) window.c3.Toast({ title: '已获得 10000 金币与 1000 钻石' });
-                  }
-                }
-              },
-              {
-                name: '【获得指定物品】',
-                flag: '棋盘',
-                level: 9994,
-                color: cc.v3(14, 165, 233), // 青天蓝
-                helpText: '在【对象ID】输入物品ID（例如 1001201 生菜），点击生成',
-                func: function (paramElemId) {
-                  var elemId = parseInt((paramElemId || (this.idEdit && this.idEdit.string) || '').trim(), 10);
-                  if (isNaN(elemId) || elemId <= 0) {
-                    if (window.c3) window.c3.Alert({ title: '获得物品', content: '请先在上方【对象ID】输入物品ID（例如 1001201 为生菜）' });
-                    return;
-                  }
-                  if (role && role.boards && role.boards.get(1)) {
-                    var b = role.boards.get(1);
-                    var emptyIdx = -1;
-                    for (var i = 1; i <= 63; i++) {
-                      if (!b.cells.has(i)) { emptyIdx = i; break; }
-                    }
-                    if (emptyIdx === -1) {
-                      if (window.c3) window.c3.Toast({ title: '棋盘已满，无可用空位！' });
-                      return;
-                    }
-                    b.incrementId = (b.incrementId || 100) + 1;
-                    b.cells.set(emptyIdx, {
-                      index: emptyIdx,
-                      elementId: elemId,
-                      state: 0,
-                      hp: 0,
-                      uUID: b.incrementId,
-                      seed: Math.floor(Math.random() * 100000) + 1
-                    });
-                    if (window.saveNow) window.saveNow();
-                    if (window.c3) window.c3.Toast({ title: '已在棋盘生成物品: ' + elemId });
-                  }
-                }
-              },
-              {
-                name: '【清理棋盘空格】',
-                flag: '棋盘',
-                level: 9993,
-                color: cc.v3(100, 116, 139), // 灰蓝
-                helpText: '清理棋盘上未锁定的普通散落物（保留发射器），释放空间',
-                func: function () {
-                  if (role && role.boards && role.boards.get(1)) {
-                    var b = role.boards.get(1);
-                    var removed = 0;
-                    b.cells.forEach(function (c, idx) {
-                      // 保留发射器（10011系列）和纸箱/蛛网
-                      if (c.state === 0 && !String(c.elementId).startsWith('10011')) {
-                        b.cells.delete(idx);
-                        removed++;
-                      }
-                    });
-                    if (window.saveNow) window.saveNow();
-                    if (window.c3) window.c3.Toast({ title: '已清理 ' + removed + ' 个普通物品' });
-                  }
-                }
-              },
-              {
-                name: '【重置当前账号】',
-                flag: '账号',
-                level: 9992,
-                color: cc.v3(239, 68, 68), // 亮红
-                helpText: '清空当前 UID 进度，全新重新开始第一天',
-                func: function () {
-                  if (window.c3) {
-                    window.c3.Alert({
-                      title: '重置确认',
-                      content: '确定要清空当前账号并重新开始游戏吗？',
-                      confirm: function () {
-                        if (window.resetGameProgress) window.resetGameProgress();
-                      }
-                    });
-                  }
-                }
-              }
-            ];
-
-            var filterKey = (searchKey || '').trim();
-            var finalItems = customTools;
-            if (filterKey) {
-              finalItems = customTools.filter(function (it) {
-                return it.name.indexOf(filterKey) >= 0 || it.flag.indexOf(filterKey) >= 0;
-              });
+        // 2. 彻底拦截 ExtraGmTool 列表渲染，只展示 8 个核心功能
+        extraGmCls.prototype.initGmList = function (searchKey) {
+          try {
+            if (this.node) {
+              this.node.height = 450;
+              if (this.node.parent) this.node.parent.height = 500;
             }
-
-            // 完全只使用我们的精选功能，彻底抛弃原版杂乱项
-            if (this.list) {
-              this.list.data = finalItems;
+            if (this.list && this.list.node) {
+              this.list.node.height = 360;
+              if (this.list.node.parent) this.list.node.parent.height = 360;
             }
-          };
-          console.log('[GM] 精简纯净版肥鹅 GM 工具已就绪！');
-        }
-      } catch (e) {
-        console.warn('[GM] 注入 ExtraGmTool 失败:', e);
+            ['searchHistoryUpBtn', 'searchHistoryDownBtn', 'paramHistoryUpBtn', 'paramHistoryDownBtn'].forEach(function (btnName) {
+              var btn = cc.find(btnName, this.node);
+              if (btn) btn.active = false;
+            }, this);
+          } catch (err) {}
+
+          var role = window._user_mgr_ && window._user_mgr_.role;
+
+          var customTools = [
+            {
+              name: '【切换账号 UID】',
+              flag: '账号',
+              level: 9999,
+              color: cc.v3(245, 158, 11), // 温暖琥珀橙
+              helpText: '在上方【对象ID】输入目标 UID（例如 1002），点击切换',
+              func: function (paramId) {
+                var uid = (paramId || (this.idEdit && this.idEdit.string) || '').trim();
+                if (!uid) {
+                  if (window.c3) window.c3.Alert({ title: '切换账号', content: '请先在上方【对象ID】输入框中输入目标账号 UID（例如 1002）' });
+                  return;
+                }
+                var url = new URL(location.href);
+                url.searchParams.set('uid', uid);
+                location.href = url.toString();
+              }
+            },
+            {
+              name: '【修改角色昵称】',
+              flag: '账号',
+              level: 9998,
+              color: cc.v3(59, 130, 246), // 亮蓝
+              helpText: '在上方【对象ID】输入新昵称，点击保存生效',
+              func: function (paramName) {
+                var name = (paramName || (this.idEdit && this.idEdit.string) || '').trim();
+                if (!name) {
+                  if (window.c3) window.c3.Alert({ title: '修改昵称', content: '请先在上方【对象ID】输入框中输入新昵称' });
+                  return;
+                }
+                if (role) {
+                  role.name = name;
+                  if (window.saveNow) window.saveNow();
+                  if (window.c3) window.c3.Toast({ title: '昵称已修改为: ' + name });
+                }
+              }
+            },
+            {
+              name: '【设置游戏天数】',
+              flag: '进度',
+              level: 9997,
+              color: cc.v3(16, 185, 129), // 翡翠绿
+              helpText: '在上方【对象ID】输入目标天数（如 1、2、3），点击跳转',
+              func: function (paramDays) {
+                var days = parseInt((paramDays || (this.idEdit && this.idEdit.string) || '').trim(), 10);
+                if (isNaN(days) || days < 1) {
+                  if (window.c3) window.c3.Alert({ title: '设置天数', content: '请在上方【对象ID】输入正整数天数（例如 1 或 2）' });
+                  return;
+                }
+                if (role) {
+                  role.days = days;
+                  if (role.day !== undefined) role.day = days;
+                  if (window.saveNow) window.saveNow();
+                  if (window.c3) window.c3.Toast({ title: '游戏天数已设置为第 ' + days + ' 天' });
+                }
+              }
+            },
+            {
+              name: '【一键补满体力】',
+              flag: '资源',
+              level: 9996,
+              color: cc.v3(234, 179, 8), // 亮黄
+              helpText: '点击为角色恢复 100 点满额体力',
+              func: function () {
+                if (role && role.energy) {
+                  role.energy.value = Math.max(100, role.energy.valueMax || 100);
+                  if (window.saveNow) window.saveNow();
+                  if (window.c3) window.c3.Toast({ title: '体力已补满至 ' + role.energy.value });
+                }
+              }
+            },
+            {
+              name: '【增加金币钻石】',
+              flag: '资源',
+              level: 9995,
+              color: cc.v3(168, 85, 247), // 紫色
+              helpText: '点击获得 10000 金币 + 1000 钻石',
+              func: function () {
+                if (role) {
+                  role.coin = (role.coin || 0) + 10000;
+                  role.diamond = (role.diamond || 0) + 1000;
+                  if (window.saveNow) window.saveNow();
+                  if (window.c3) window.c3.Toast({ title: '已获得 10000 金币与 1000 钻石' });
+                }
+              }
+            },
+            {
+              name: '【获得指定物品】',
+              flag: '棋盘',
+              level: 9994,
+              color: cc.v3(14, 165, 233), // 青天蓝
+              helpText: '在【对象ID】输入物品ID（例如 1001201 生菜），点击生成',
+              func: function (paramElemId) {
+                var elemId = parseInt((paramElemId || (this.idEdit && this.idEdit.string) || '').trim(), 10);
+                if (isNaN(elemId) || elemId <= 0) {
+                  if (window.c3) window.c3.Alert({ title: '获得物品', content: '请先在上方【对象ID】输入物品ID（例如 1001201 为生菜）' });
+                  return;
+                }
+                if (role && role.boards && role.boards.get(1)) {
+                  var b = role.boards.get(1);
+                  var emptyIdx = -1;
+                  for (var i = 1; i <= 63; i++) {
+                    if (!b.cells.has(i)) { emptyIdx = i; break; }
+                  }
+                  if (emptyIdx === -1) {
+                    if (window.c3) window.c3.Toast({ title: '棋盘已满，无可用空位！' });
+                    return;
+                  }
+                  b.incrementId = (b.incrementId || 100) + 1;
+                  b.cells.set(emptyIdx, {
+                    index: emptyIdx,
+                    elementId: elemId,
+                    state: 0,
+                    hp: 0,
+                    uUID: b.incrementId,
+                    seed: Math.floor(Math.random() * 100000) + 1
+                  });
+                  if (window.saveNow) window.saveNow();
+                  if (window.c3) window.c3.Toast({ title: '已在棋盘生成物品: ' + elemId });
+                }
+              }
+            },
+            {
+              name: '【清理棋盘空格】',
+              flag: '棋盘',
+              level: 9993,
+              color: cc.v3(100, 116, 139), // 灰蓝
+              helpText: '清理棋盘上未锁定的普通散落物（保留发射器），释放空间',
+              func: function () {
+                if (role && role.boards && role.boards.get(1)) {
+                  var b = role.boards.get(1);
+                  var removed = 0;
+                  b.cells.forEach(function (c, idx) {
+                    // 保留发射器（10011系列）和纸箱/蛛网
+                    if (c.state === 0 && !String(c.elementId).startsWith('10011')) {
+                      b.cells.delete(idx);
+                      removed++;
+                    }
+                  });
+                  if (window.saveNow) window.saveNow();
+                  if (window.c3) window.c3.Toast({ title: '已清理 ' + removed + ' 个普通物品' });
+                }
+              }
+            },
+            {
+              name: '【重置当前账号】',
+              flag: '账号',
+              level: 9992,
+              color: cc.v3(239, 68, 68), // 亮红
+              helpText: '清空当前 UID 进度，全新重新开始第一天',
+              func: function () {
+                if (window.c3) {
+                  window.c3.Alert({
+                    title: '重置确认',
+                    content: '确定要清空当前账号并重新开始游戏吗？',
+                    confirm: function () {
+                      if (window.resetGameProgress) window.resetGameProgress();
+                    }
+                  });
+                }
+              }
+            }
+          ];
+
+          var filterKey = (searchKey || '').trim();
+          var finalItems = customTools;
+          if (filterKey) {
+            finalItems = customTools.filter(function (it) {
+              return it.name.indexOf(filterKey) >= 0 || it.flag.indexOf(filterKey) >= 0;
+            });
+          }
+
+          if (this.list) {
+            this.list.data = finalItems;
+          }
+        };
+        console.log('[GM] ExtraGmTool 精简版已成功挂载！');
+      }
+
+      // 3. 终极兜底：Hook GmTool.prototype.onClickShow
+      var gmToolCls = cc.js.getClassByName('GmTool');
+      if (gmToolCls && gmToolCls.prototype && !gmToolCls.prototype.__filterHooked) {
+        gmToolCls.prototype.__filterHooked = true;
+        var origOnClickShow = gmToolCls.prototype.onClickShow;
+        gmToolCls.prototype.onClickShow = function () {
+          try {
+            var extraComp = this.extraGm && (this.extraGm.getComponent(extraGmCls) || this.extraGm.getComponent('ExtraGmTool'));
+            if (extraComp && typeof extraComp.initGmList === 'function') {
+              extraComp.initGmList('');
+            }
+          } catch (e) {}
+          return origOnClickShow.apply(this, arguments);
+        };
+        console.log('[GM] GmTool.prototype.onClickShow 终极拦截已就绪！');
       }
 
       return true;
     }
+
+    // 独立持续轮询，确保业务脚本加载完毕后必定挂载
+    (function () {
+      var gmAttempts = 0;
+      var gmTimer = setInterval(function () {
+        gmAttempts++;
+        if (applyExtraGmToolHook()) {
+          clearInterval(gmTimer);
+        }
+        if (gmAttempts >= 120) {
+          clearInterval(gmTimer);
+        }
+      }, 300);
+    })();
 
     // 2. 深度拦截 GooseWorld 与实体上的 setDebugText / setDebugVisible
     var patchDebugMethods = function () {

@@ -15,44 +15,46 @@
       user-select: none; -webkit-user-select: none;
       touch-action: none;
     }
-    :root {
-      --game-viewport-w: 520;
-      --game-viewport-h: 924;
+    /* 恢复原版 100% 物理像素级高清全屏渲染，彻底消除发糊 */
+    canvas {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+      z-index: 1;
+      touch-action: none;
     }
-    #game-container { position: fixed; top: 0; left: 0; pointer-events: none;
-      /* 视口框架: 默认按 520:924 (≈9:16) 满高内接矩形，大幅放大桌面浏览器字体与操作面积。
-         同时支持在 GM 工具条实时一键切换标准/舒适/超清/原画模式 */
-      width: min(100vw, calc(100vh * var(--game-viewport-w) / var(--game-viewport-h)));
-      height: min(100vh, calc(100vw * var(--game-viewport-h) / var(--game-viewport-w)));
-    }
-    canvas { position: fixed !important; top: 0 !important; left: 0 !important;
-      width: min(100vw, calc(100vh * var(--game-viewport-w) / var(--game-viewport-h))) !important;
-      height: min(100vh, calc(100vw * var(--game-viewport-h) / var(--game-viewport-w))) !important;
-      display: block; z-index: 1; touch-action: none;
-      -webkit-font-smoothing: antialiased;
-      image-rendering: auto;
-    }
+    /* 极简侧边隐藏式开发者工具 (平时只露出边缘小药丸，点击滑出) */
     #gm-toolbar {
-      position: fixed; top: 12px; right: 12px; z-index: 999999;
+      position: fixed; top: 20%; right: 0; z-index: 999999;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size: 13px; color: #fff;
+      display: flex; flex-direction: column; align-items: flex-end;
+      touch-action: auto !important;
     }
     #gm-toggle {
-      background: rgba(30, 30, 30, 0.85);
-      border: 1px solid rgba(255, 255, 255, 0.25);
-      padding: 6px 12px; border-radius: 8px; cursor: pointer;
-      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-weight: 600;
-      transition: background 0.2s;
+      background: rgba(20, 20, 20, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-right: none;
+      padding: 8px 10px 8px 12px;
+      border-radius: 20px 0 0 20px;
+      cursor: pointer;
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      box-shadow: -2px 4px 10px rgba(0,0,0,0.3);
+      font-size: 12px; font-weight: 600; color: #f26b1d;
+      transition: all 0.2s;
     }
-    #gm-toggle:hover { background: rgba(50, 50, 50, 0.95); }
+    #gm-toggle:hover { background: rgba(30, 30, 30, 0.95); padding-right: 14px; }
     #gm-panel {
-      margin-top: 8px; background: rgba(20, 20, 20, 0.92);
+      margin-top: 6px; margin-right: 8px;
+      background: rgba(18, 18, 18, 0.95);
       border: 1px solid rgba(255, 255, 255, 0.18);
-      border-radius: 10px; padding: 10px; display: flex;
+      border-radius: 12px; padding: 12px; display: flex;
       flex-direction: column; gap: 8px; width: 220px;
       backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
     }
     #gm-panel.collapsed { display: none; }
     #gm-panel button {
@@ -60,12 +62,18 @@
       color: #fff; border: none; padding: 8px 10px;
       border-radius: 6px; font-size: 12px; font-weight: 500;
       cursor: pointer; transition: transform 0.1s, opacity 0.2s;
+      touch-action: manipulation;
     }
     #gm-panel button:hover { opacity: 0.9; }
     #gm-panel button:active { transform: scale(0.97); }
     #gm-panel button.btn-warn {
       background: linear-gradient(135deg, #e53935 0%, #e35d5b 100%);
     }
+    .user-info-box {
+      background: rgba(255,255,255,0.08); padding: 8px; border-radius: 6px;
+      font-size: 12px; display: flex; flex-direction: column; gap: 6px;
+    }
+    .user-info-row { display: flex; justify-content: space-between; align-items: center; }
     #gm-status { font-size: 11px; color: #a0aec0; text-align: center; margin-top: 2px; }
     @font-face {
       font-family: 'zh-regular';
@@ -88,43 +96,32 @@
       background: rgba(0,0,0,.85); color: #0f0; font: 11px/1.4 monospace; padding: 6px; z-index: 9999;
       white-space: pre-wrap; word-break: break-all; display: none;
     }
-    /* 顶部玩家云同步与信箱状态栏 */
-    #user-topbar {
-      position: fixed; top: 12px; left: 12px; z-index: 999999;
-      display: flex; gap: 8px; align-items: center;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size: 12px; color: #fff;
-    }
-    .topbar-pill {
-      background: rgba(30, 30, 30, 0.85);
-      border: 1px solid rgba(255, 255, 255, 0.25);
-      padding: 6px 12px; border-radius: 20px; cursor: pointer;
-      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-weight: 600;
-      display: flex; align-items: center; gap: 6px; position: relative;
-    }
-    .topbar-pill:hover { background: rgba(50, 50, 50, 0.95); }
-    .badge-dot {
-      width: 8px; height: 8px; background: #ef4444; border-radius: 50%;
-      position: absolute; top: 4px; right: 4px; display: none;
-    }
   </style>
 </head>
 <body>
   <div id="game-container"></div>
   <div id="log"></div>
 
-  <!-- 顶部玩家云同步与信箱状态栏 (无全屏遮挡，开屏即玩) -->
-  <div id="user-topbar">
-    <div class="topbar-pill" onclick="promptChangeUID()" title="点击切换或修改测试ID">
-      <span>👤</span><span id="player-uid-display">UID: 1001</span><span style="font-size:10px;color:#94a3b8;margin-left:2px;">(改名)</span>
-    </div>
-    <div class="topbar-pill" onclick="handleOpenMail()" title="打开系统信箱">
-      <span>✉️</span><span>信箱</span>
-      <div id="mail-badge" class="badge-dot"></div>
-    </div>
-    <div class="topbar-pill" style="cursor: default;" id="sync-status-pill">
-      <span id="sync-icon">☁️</span><span id="sync-status-text">已连接</span>
+  <!-- 侧边隐藏式开发者工具 (平时只露小药丸，点击滑出，UID收纳在内) -->
+  <div id="gm-toolbar">
+    <div id="gm-toggle" onclick="toggleGM()">⚡️ GM 调试</div>
+    <div id="gm-panel" class="collapsed">
+      <div class="user-info-box">
+        <div class="user-info-row">
+          <span style="color:#94a3b8;">测试 UID:</span>
+          <b id="player-uid-display" style="color:#f26b1d;">1001</b>
+          <a href="javascript:void(0)" onclick="promptChangeUID()" style="color:#38bdf8;text-decoration:none;font-size:11px;">[切换/改名]</a>
+        </div>
+        <div class="user-info-row">
+          <span style="color:#94a3b8;">云端状态:</span>
+          <span id="sync-status-text" style="color:#4ade80;">☁️ 已连接</span>
+        </div>
+      </div>
+      <button onclick="window.openMailWindow && window.openMailWindow()">✉️ 打开系统信箱</button>
+      <button onclick="window.__gmRefillEnergy()">⚡️ 体力回满(+100)</button>
+      <button onclick="window.__gmAddDiamond(1000)">💎 加钻石(+1000)</button>
+      <button class="btn-warn" onclick="window.__gmResetProgress()">🔄 清除进度重开 (测新手引导)</button>
+      <div id="gm-status">状态: 游戏中</div>
     </div>
   </div>
 
@@ -132,49 +129,31 @@
     function getStoredUID() {
       var uid = localStorage.getItem('fe_player_uid');
       if (!uid || !uid.trim()) {
-        uid = '1001'; // 默认直接赋予 1001，绝不弹全屏遮罩挡住屏幕
+        uid = '1001';
         localStorage.setItem('fe_player_uid', uid);
       }
       return uid;
     }
     function updateUIDDisplay(uid) {
       var el = document.getElementById('player-uid-display');
-      if (el) el.innerText = 'UID: ' + (uid || '1001');
+      if (el) el.innerText = uid || '1001';
     }
     window.getCurrentPlayerUID = function () {
       return getStoredUID();
     };
     window.__updateCloudSyncStatus = function (status) {
-      var icon = document.getElementById('sync-icon');
       var txt = document.getElementById('sync-status-text');
       if (!txt) return;
       if (status === 'syncing') {
-        txt.innerText = '同步中...';
+        txt.innerText = '☁️ 同步中...';
       } else if (status === 'synced') {
-        txt.innerText = '已同步';
+        txt.innerText = '☁️ 已同步';
       } else if (status === 'offline') {
         txt.innerText = '本地离线';
       } else if (status === 'error') {
         txt.innerText = '同步异常';
       }
     };
-    window.__updateMailBadge = function (count) {
-      var badge = document.getElementById('mail-badge');
-      if (!badge) return;
-      if (count && count > 0) {
-        badge.style.display = 'block';
-      } else {
-        badge.style.display = 'none';
-      }
-    };
-    function handleOpenMail() {
-      if (window.openMailWindow) {
-        window.openMailWindow();
-        window.__updateMailBadge(0);
-      } else {
-        alert('游戏主界面加载中，请稍候再点信箱~');
-      }
-    }
     function promptChangeUID() {
       var cur = getStoredUID();
       var input = prompt('请输入新的测试 UID / 昵称 (更换后将自动从云端加载对应的存档):', cur);
@@ -196,43 +175,18 @@
         }
         if (json.ok && json.newMails && json.newMails.length > 0) {
           window.__pendingCloudMails = json.newMails;
-          window.__updateMailBadge(json.newMails.length);
         }
       } catch (e) {
         console.warn('[cloud-sync] 拉取失败:', e);
       }
     }
 
-    // 初始化直接运行，开屏零遮挡秒进游戏
     (function initUser() {
       var uid = getStoredUID();
       updateUIDDisplay(uid);
       fetchAndRestoreCloud(uid);
     })();
   </script>
-
-  <!-- GM 开发者快速调试工具条 -->
-  <div id="gm-toolbar">
-    <div id="gm-toggle" onclick="toggleGM()">⚡️ 开发者调试工具 (GM) ▾</div>
-    <div id="gm-panel" class="collapsed">
-      <div style="background:rgba(255,255,255,0.08);padding:6px;border-radius:6px;display:flex;flex-direction:column;gap:4px;">
-        <label style="font-size:11px;color:#cbd5e1;font-weight:600;">🖥 视口与字体清晰度:</label>
-        <select id="viewport-select" onchange="window.setGameViewport(this.value)" style="background:#222;color:#fff;border:1px solid #555;border-radius:4px;padding:4px;font-size:12px;outline:none;cursor:pointer;">
-          <option value="comfortable">🖥 舒适大屏 (520px - 推荐)</option>
-          <option value="compact">📱 紧凑手机 (390px)</option>
-          <option value="large">🔍 超清大屏 (640px)</option>
-          <option value="native">🎯 1:1 原画 (750px)</option>
-        </select>
-      </div>
-      <button onclick="window.__gmSkipComic()">🎬 跳过开场漫画</button>
-      <button onclick="window.__gmGoToMainBoard()">🎯 直达第1天主大棋盘</button>
-      <button class="btn-warn" onclick="window.__gmResetProgress()">🔄 清除进度重开</button>
-      <button onclick="window.__gmAddDiamond(1000)">💎 只加钻石(+1000)</button>
-      <button onclick="window.__gmRefillEnergy()">⚡️ 体力回满</button>
-      <button onclick="window.__gmInstantCook()">🍳 做菜瞬间完成</button>
-      <div id="gm-status">状态: 游戏中</div>
-    </div>
-  </div>
 
   <script>
     function getRealEl(id) {

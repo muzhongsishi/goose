@@ -1616,6 +1616,9 @@
 
   function ensureRolePass(role) {
     if (!role) return;
+    // 遵循原版配置表 PassAct: 完成第 12 个抽屉(FinishDrawer12)才解锁通行证与VIP系统
+    var b1 = role.boards && role.boards.get(1);
+    if (!b1 || (b1.orderDrawerEndId || 0) < 12) return;
     var nowSec = Math.floor(Date.now() / 1000);
     if (!role.globalActivity) role.globalActivity = new Map();
     if (!(role.globalActivity instanceof Map)) role.globalActivity = new Map();
@@ -2487,15 +2490,8 @@
       //createAt 若以 {__d:0} 对象形态留到 PV.init 的 checkRetention,getDay() 当场断链(卡98%),
       //故恢复完必须立即强制规整(以恢复后状态为准)
       coerceCreateAt(role);
-      // 引导进度兜底:早期存档期间 game_guidesave 全被 code:0 假响应吞掉,guide 没有写回,
-      //guide 空档 = 客户端判"从没做过教程"→ 刷新重播 Intro → 挂死 98%。
-      //注入完成态救活旧坏档;新档由下方 applyGuideSave 实时写回,不会走到这分支
-      if (!(role.guide instanceof Map) || role.guide.size === 0) {
-        if (!(role.guide instanceof Map)) role.guide = new Map();
-        role.guide.set('Intro', 1211); // Intro 链唯一 keyStep → isEnd(Intro)=true,不再重播
-        role.guide.set('Merge', 0);    // isStart(Merge)=true,needStartIntroGuide 最后条件也拦截
-        console.warn('[mock-save] 检出空 guide,已注入教程完成态(Intro=1211, Merge=0)');
-      }
+      // 引导进度 Map 正常规整，绝不强行跳过新手开场漫画与教程
+      if (!(role.guide instanceof Map)) role.guide = new Map();
       // 订单播种:早期存档 board.orders 为空(当时假服务器从不发订单),按配置补种当前抽屉
       ensureOrdersSeeded(role);
       // 旧档兜底:早期存档无 role.shop(窗口打开即崩,见 ensureRoleShop 注释)
@@ -2516,24 +2512,6 @@
             if (!v || !v.elementId) b1.bag.items.delete(k);
           });
         }
-      }
-      // 检查第 6 天奖励自动补发: 检出未补偿过的存档，自动将第 6 天全套物资注入左上角气泡通道
-      if (!role._day6Compensated) {
-        var conf6 = {
-          reward: { '1001103': 1, '1002404': 1, '1004101': 1, '3003002': 1, 'Energy': 20, 'Diamond': 20 }
-        };
-        var rw = parseRewardMap(conf6.reward);
-        grantCurrency(role, rw);
-        grantChannelElements(role, rw, 'compensate_day6');
-        role._day6Compensated = true;
-        console.log('[mock-save] 已自动为本地存档补发第 6 天全套奖励物资至左上角气泡通道！', conf6.reward);
-      }
-      // 自动补发榨汁杯 (3003003) 补偿: 解决此前背包/棋盘异常丢失榨汁杯问题
-      if (!role._juicerCompensated) {
-        var rwJuicer = [{ itemType: 7, itemId: 3003003, value: 1 }];
-        grantChannelElements(role, rwJuicer, 'compensate_juicer');
-        role._juicerCompensated = true;
-        console.warn('[mock-save] 已自动为玩家补发 榨汁杯 (3003003) 至棋盘通道！');
       }
       console.log('[mock-save] 已恢复本地存档: cells=' + b1.cells.size + ', id=' + saved.id);
       window.__mockLastRestore = { ok: true, err: null, at: Date.now() };

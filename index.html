@@ -108,52 +108,16 @@
       width: 8px; height: 8px; background: #ef4444; border-radius: 50%;
       position: absolute; top: 4px; right: 4px; display: none;
     }
-    /* UID 登录/绑定模态框 */
-    #uid-modal-overlay {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.7); z-index: 10000000;
-      display: none; align-items: center; justify-content: center;
-      backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
-      touch-action: auto !important;
-      pointer-events: auto !important;
-      user-select: auto !important;
-      -webkit-user-select: auto !important;
-    }
-    .uid-modal-card {
-      background: #ffffff; color: #1e293b; border-radius: 16px;
-      padding: 24px; width: 85%; max-width: 320px; text-align: center;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      touch-action: auto !important;
-      pointer-events: auto !important;
-    }
-    .uid-modal-card h3 { margin: 0 0 10px 0; font-size: 18px; color: #f26b1d; }
-    .uid-modal-card p { margin: 0 0 16px 0; font-size: 13px; color: #64748b; line-height: 1.5; }
-    .uid-modal-card input {
-      width: 100%; padding: 12px 14px; border: 1.5px solid #cbd5e1;
-      border-radius: 8px; font-size: 16px; margin-bottom: 16px; box-sizing: border-box;
-      text-align: center; font-weight: bold; outline: none;
-      touch-action: auto !important; pointer-events: auto !important;
-      user-select: text !important; -webkit-user-select: text !important;
-    }
-    .uid-modal-card input:focus { border-color: #f26b1d; }
-    .uid-modal-card button {
-      width: 100%; padding: 13px; background: #f26b1d; color: #fff;
-      border: none; border-radius: 8px; font-size: 16px; font-weight: bold;
-      cursor: pointer; transition: background 0.2s;
-      touch-action: manipulation !important; pointer-events: auto !important;
-    }
-    .uid-modal-card button:hover { background: #d9580f; }
   </style>
 </head>
 <body>
   <div id="game-container"></div>
   <div id="log"></div>
 
-  <!-- 顶部玩家云同步与信箱状态栏 -->
+  <!-- 顶部玩家云同步与信箱状态栏 (无全屏遮挡，开屏即玩) -->
   <div id="user-topbar">
     <div class="topbar-pill" onclick="promptChangeUID()" title="点击切换或修改测试ID">
-      <span>👤</span><span id="player-uid-display">UID: 游客</span>
+      <span>👤</span><span id="player-uid-display">UID: 1001</span><span style="font-size:10px;color:#94a3b8;margin-left:2px;">(改名)</span>
     </div>
     <div class="topbar-pill" onclick="handleOpenMail()" title="打开系统信箱">
       <span>✉️</span><span>信箱</span>
@@ -164,23 +128,18 @@
     </div>
   </div>
 
-  <!-- UID 弹窗 -->
-  <div id="uid-modal-overlay">
-    <div class="uid-modal-card">
-      <h3>🪿 欢迎来到肥鹅健身房</h3>
-      <p>检测到您的专属测试账号，点击即可进入游戏，您的进度和信箱道具将实时同步到云端：</p>
-      <input type="text" id="uid-input" value="1001" placeholder="例如: 1001 或 娟娟" oninput="window.__tempUID = this.value" onkeydown="if(event.key==='Enter')confirmPlayerUID(event)">
-      <button type="button" onclick="confirmPlayerUID(event)">进入游戏</button>
-    </div>
-  </div>
-
   <script>
     function getStoredUID() {
-      return localStorage.getItem('fe_player_uid') || '';
+      var uid = localStorage.getItem('fe_player_uid');
+      if (!uid || !uid.trim()) {
+        uid = '1001'; // 默认直接赋予 1001，绝不弹全屏遮罩挡住屏幕
+        localStorage.setItem('fe_player_uid', uid);
+      }
+      return uid;
     }
     function updateUIDDisplay(uid) {
       var el = document.getElementById('player-uid-display');
-      if (el) el.innerText = 'UID: ' + (uid || '未设置');
+      if (el) el.innerText = 'UID: ' + (uid || '1001');
     }
     window.getCurrentPlayerUID = function () {
       return getStoredUID();
@@ -225,27 +184,6 @@
         location.reload();
       }
     }
-    function confirmPlayerUID(e) {
-      if (e) {
-        try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
-      }
-      var inputEl = document.getElementById('uid-input');
-      var val = (inputEl ? inputEl.value : '') || window.__tempUID || '';
-      var input = val.trim();
-      // 如果完全没填，自动兜底赋予默认编号，绝对不弹窗报错卡死玩家
-      if (!input) {
-        input = '1001';
-      }
-      try { localStorage.setItem('fe_player_uid', input); } catch (err) {}
-      var overlay = document.getElementById('uid-modal-overlay');
-      if (overlay) {
-        overlay.style.setProperty('display', 'none', 'important');
-        overlay.style.pointerEvents = 'none';
-        try { overlay.remove(); } catch (err) {} // 彻底物理移除
-      }
-      updateUIDDisplay(input);
-      fetchAndRestoreCloud(input);
-    }
 
     async function fetchAndRestoreCloud(uid) {
       if (!uid) return;
@@ -265,19 +203,11 @@
       }
     }
 
-    // 初始化检查 UID
+    // 初始化直接运行，开屏零遮挡秒进游戏
     (function initUser() {
       var uid = getStoredUID();
-      if (uid) {
-        updateUIDDisplay(uid);
-        fetchAndRestoreCloud(uid);
-      } else {
-        // 延时 300ms 弹出模态框让用户输入
-        setTimeout(function () {
-          var overlay = document.getElementById('uid-modal-overlay');
-          if (overlay) overlay.style.display = 'flex';
-        }, 300);
-      }
+      updateUIDDisplay(uid);
+      fetchAndRestoreCloud(uid);
     })();
   </script>
 

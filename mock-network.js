@@ -152,16 +152,24 @@
   var cloudSyncTimer = null;
   function scheduleCloudSync(role, serializedData) {
     var uid = window.getCurrentPlayerUID ? window.getCurrentPlayerUID() : (localStorage.getItem('fe_player_uid') || '');
-    if (!uid) return;
+    if (!uid) {
+      try {
+        var qUid = new URLSearchParams(location.search).get('uid');
+        if (qUid) uid = qUid.trim();
+      } catch (e) {}
+    }
+    if (!uid) uid = '1001';
     if (cloudSyncTimer) clearTimeout(cloudSyncTimer);
     cloudSyncTimer = setTimeout(function () {
       cloudSyncTimer = null;
       if (window.__updateCloudSyncStatus) window.__updateCloudSyncStatus('syncing');
+      var r = (_user_mgr && _user_mgr.role) || (window._user_mgr_ && window._user_mgr_.role) || role;
       var summary = {
-        day: (role.day && role.day.naturalDay) || 1,
-        level: (role.user && role.user.level) || 1,
-        coin: (role.wallet && role.wallet.coin) || 0,
-        energy: (role.energy && role.energy.cur) || 0
+        day: Number(r.days || r.day || 1),
+        level: Number(r.level || (r.user && r.user.level) || 1),
+        coin: Number(r.coin || 0),
+        diamond: Number(r.diamond || 0),
+        energy: Number((r.energy && r.energy.value) || 0)
       };
       fetch('/api/sync', {
         method: 'POST',
@@ -171,7 +179,7 @@
           roleData: serializedData,
           summary: summary
         })
-      }).then(function (r) { return r.json(); }).then(function (res) {
+      }).then(function (res) { return res.json(); }).then(function (res) {
         if (res && res.ok) {
           if (window.__updateCloudSyncStatus) window.__updateCloudSyncStatus('synced');
         } else {
@@ -222,7 +230,7 @@
       //reload 触发的 beforeunload 强存——都会把内存里的活体 role 写回去,旧档还魂,
       //重置等于没按(实测踩坑)
       if (window.__suppressMockSave) return false;
-      var role = _user_mgr && _user_mgr.role;
+      var role = (_user_mgr && _user_mgr.role) || (window._user_mgr_ && window._user_mgr_.role) || (window.d3 && window.d3.role);
       if (!role || !role.boards || !role.boards.get || !role.boards.get(1)) return false;
       // 存档保护:盘上已有存档且本页面生命周期还没恢复它时,此刻的 role 是客户端
       //reset 出来的全新空壳,此刻落盘会用空壳覆盖玩家进度(登录窗口竞态)——拒绝
@@ -252,6 +260,7 @@
     }
   }
   window.__mockSaveNow = saveNow;
+  window.saveNow = saveNow;
 
   // role 属性陷阱:客户端登录流程会 reset() 重造 role(new 出来的 createAt 不是 Date),
   //留存统计 createAt.getDay() 会当场崩。任何对象被赋为 role 的瞬间强制规整 createAt。
@@ -5350,7 +5359,7 @@
           };
         }
 
-        // 2. 彻底拦截 ExtraGmTool 列表渲染，只展示 5 个极简核心功能，并隐藏冗余输入框
+        // 2. 彻底拦截 ExtraGmTool 列表渲染，只展示 3 个极简核心功能，并隐藏冗余输入框
         extraGmCls.prototype.initGmList = function () {
           try {
             // 隐藏上方的搜索框、对象ID、值、翻页按钮等全部冗余控件
@@ -5364,37 +5373,42 @@
               // 调整标题 Title
               var titleNode = contentNode.getChildByName('Title');
               if (titleNode) {
-                titleNode.y = 120;
+                titleNode.y = 85;
                 var tLbl = titleNode.getComponent(cc.Label);
-                if (tLbl) { tLbl.string = '快捷调试'; tLbl.fontSize = 22; }
+                if (tLbl) { tLbl.string = '快捷调试'; tLbl.fontSize = 20; }
               }
 
-              // 调整背景尺寸为小巧紧凑卡片
+              // 调整背景尺寸为小巧紧凑卡片 (宽 220, 高 220)
               var bgNode = contentNode.getChildByName('bg');
               if (bgNode) {
-                bgNode.width = 380;
-                bgNode.height = 320;
+                bgNode.width = 220;
+                bgNode.height = 220;
                 bgNode.y = 0;
               }
-              contentNode.height = 320;
+              contentNode.height = 220;
               if (contentNode.parent) {
-                contentNode.parent.height = 320; // root
+                contentNode.parent.height = 220; // root
               }
             }
 
             if (this.node) {
-              this.node.y = 90; // 上移紧贴标题
-              this.node.height = 240;
+              this.node.y = 65; // 上移紧贴标题
+              this.node.height = 170;
+              this.node.width = 200;
             }
             if (this.list && this.list.node) {
-              this.list.node.height = 240;
-              if (this.list.node.parent) this.list.node.parent.height = 240;
+              this.list.node.height = 170;
+              this.list.node.width = 200;
+              if (this.list.node.parent) {
+                this.list.node.parent.height = 170;
+                this.list.node.parent.width = 200;
+              }
             }
           } catch (err) {}
 
           var role = window._user_mgr_ && window._user_mgr_.role;
 
-          // 仅保留用户指定的 5 个核心功能
+          // 仅保留用户指定的 3 个极简功能
           var customTools = [
             {
               name: '切换账号',
@@ -5403,11 +5417,14 @@
               color: cc.v3(245, 158, 11), // 温暖琥珀橙
               helpText: '点击输入目标 UID，快速切换账号',
               func: function () {
-                var currentUid = new URL(location.href).searchParams.get('uid') || '1001';
+                var currentUid = (window.getCurrentPlayerUID && window.getCurrentPlayerUID()) || new URL(location.href).searchParams.get('uid') || '1001';
                 var targetUid = prompt('请输入要切换的目标账号 UID (例如 1002):', currentUid);
                 if (targetUid === null) return;
                 targetUid = targetUid.trim();
                 if (!targetUid) return;
+                try {
+                  localStorage.setItem('fe_player_uid', targetUid);
+                } catch (e) {}
                 var url = new URL(location.href);
                 url.searchParams.set('uid', targetUid);
                 location.href = url.toString();
@@ -5433,37 +5450,9 @@
               }
             },
             {
-              name: '补充体力',
-              flag: '资源',
-              level: 9997,
-              color: cc.v3(16, 185, 129), // 翡翠绿
-              helpText: '点击为角色恢复 100 点满额体力',
-              func: function () {
-                if (role && role.energy) {
-                  role.energy.value = Math.max(100, role.energy.valueMax || 100);
-                  if (window.saveNow) window.saveNow();
-                  if (window.c3) window.c3.Toast({ title: '体力已补满至 ' + role.energy.value });
-                }
-              }
-            },
-            {
-              name: '增加100钻石',
-              flag: '资源',
-              level: 9996,
-              color: cc.v3(168, 85, 247), // 紫色
-              helpText: '点击为账号增加 100 钻石',
-              func: function () {
-                if (role) {
-                  role.diamond = (role.diamond || 0) + 100;
-                  if (window.saveNow) window.saveNow();
-                  if (window.c3) window.c3.Toast({ title: '已获得 100 钻石！当前钻石: ' + role.diamond });
-                }
-              }
-            },
-            {
               name: '重置当前账号',
               flag: '账号',
-              level: 9995,
+              level: 9997,
               color: cc.v3(239, 68, 68), // 亮红
               helpText: '清空当前 UID 进度，全新重新开始第一天',
               func: function () {
@@ -5486,7 +5475,7 @@
             this.list.data = customTools;
           }
         };
-        console.log('[GM] ExtraGmTool 5功能极简版已成功挂载！');
+        console.log('[GM] ExtraGmTool 3功能极简版已成功挂载！');
       }
 
       // 3. 终极兜底：Hook GmTool.prototype.onClickShow
@@ -5564,18 +5553,12 @@
           scanAndClean(s);
         }
         patchDebugMethods();
+        // 手机防发热掉帧性能优化：锁定 60 FPS，防止在 120Hz ProMotion 屏幕上狂飙暴热
+        if (typeof cc !== 'undefined' && cc.game && typeof cc.game.setFrameRate === 'function') {
+          cc.game.setFrameRate(60);
+        }
       });
     }
-
-    setInterval(function () {
-      if (typeof cc !== 'undefined' && cc.director) {
-        var s = cc.director.getScene();
-        if (s) {
-          scanAndClean(s);
-        }
-        patchDebugMethods();
-      }
-    }, 1500);
   }
 
   try {

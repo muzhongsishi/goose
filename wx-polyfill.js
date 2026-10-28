@@ -25,7 +25,7 @@
   var sysInfo = null;
   wx.getSystemInfoSync = function () {
     if (sysInfo) return sysInfo;
-    var dpr = global.devicePixelRatio || 1;
+    var dpr = Math.min(global.devicePixelRatio || 1, 2);
     sysInfo = {
       model: 'Browser',
       brand: 'devtools',

@@ -92,6 +92,7 @@ export async function onRequestPost(context) {
         day: summary.day || 1,
         level: summary.level || 1,
         coin: summary.coin || 0,
+        diamond: summary.diamond || 0,
         energy: summary.energy || 0
       };
       await kv.put(`user_${uid}`, JSON.stringify(userMeta));

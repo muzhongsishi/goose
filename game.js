@@ -835,7 +835,7 @@ var _typeof2 = require("@babel/runtime/helpers/typeof");
 
     t.exports = function (e) {
       e._setupContainer = function (e, t, n) {
-        var dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 3);
+        var dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2);
         var r = e._devicePixelRatio = dpr;
         if (typeof e.enableRetina === 'function') e.enableRetina(true);
         if (!__globalAdapter.isSubContext) {

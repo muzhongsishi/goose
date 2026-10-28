@@ -170,6 +170,15 @@
     window.getDom = getDom;
 
     function getStoredUID() {
+      try {
+        var urlParams = new URLSearchParams(location.search);
+        var qUid = urlParams.get('uid');
+        if (qUid && qUid.trim()) {
+          var cleanUid = qUid.trim();
+          localStorage.setItem('fe_player_uid', cleanUid);
+          return cleanUid;
+        }
+      } catch (e) {}
       var uid = localStorage.getItem('fe_player_uid');
       if (!uid || !uid.trim()) {
         uid = '1001';
@@ -438,7 +447,7 @@
   <!-- 2. wx polyfill -->
   <script src="wx-polyfill.js"></script>
   <!-- 2.5 mock-network for Orange RPC (带版本戳击碎浏览器与CDN缓存) -->
-  <script src="mock-network.js?v=20261027_v5_simple"></script>
+  <script src="mock-network.js?v=20261028_perf_v1"></script>
   <script>
     // 微信小游戏全局对象(浏览器里即 window)
     window.GameGlobal = window;

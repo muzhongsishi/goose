@@ -164,8 +164,12 @@
       cloudSyncTimer = null;
       if (window.__updateCloudSyncStatus) window.__updateCloudSyncStatus('syncing');
       var r = (_user_mgr && _user_mgr.role) || (window._user_mgr_ && window._user_mgr_.role) || role;
+      var b1 = (r.boards && r.boards.get && r.boards.get(1));
+      var endId = b1 ? Number(b1.orderDrawerEndId || 0) : 0;
+      // 肥鹅健身房中：抽屉1为新手/序章完成后进入第1天；抽屉2完成后进入第2天(依此类推)
+      var currentDay = Math.max(1, endId, Number(r.days || r.day || 1));
       var summary = {
-        day: Number(r.days || r.day || 1),
+        day: currentDay,
         level: Number(r.level || (r.user && r.user.level) || 1),
         coin: Number(r.coin || 0),
         diamond: Number(r.diamond || 0),
@@ -194,13 +198,28 @@
   function mergeCloudMails(role) {
     if (!role || !window.__pendingCloudMails || !window.__pendingCloudMails.length) return;
     if (!Array.isArray(role.mails)) role.mails = [];
-    var uid = window.getCurrentPlayerUID ? window.getCurrentPlayerUID() : (localStorage.getItem('fe_player_uid') || '');
+    var uid = window.getCurrentPlayerUID ? window.getCurrentPlayerUID() : (localStorage.getItem('fe_player_uid') || '1001');
     var added = 0;
     window.__pendingCloudMails.forEach(function (m) {
       if (!m || !m.id) return;
       var exists = role.mails.some(function (ex) { return Number(ex.id) === Number(m.id); });
       if (!exists) {
-        role.mails.unshift(m);
+        var contentObj = m.content;
+        if (typeof contentObj === 'string') {
+          try { contentObj = JSON.parse(contentObj); } catch (e) {}
+        }
+        var mailItem = {
+          id: Number(m.id),
+          title: m.title || '系统福利补给',
+          from: m.from || '肥鹅后勤部',
+          content: contentObj || { isnotice: '0', desc: '店长辛苦了！特意为您准备了补给物资，请查收！' },
+          createAt: m.createAt || Math.floor(Date.now() / 1000),
+          expireAt: m.expireAt || (Math.floor(Date.now() / 1000) + 86400 * 30),
+          state: 1, // 1 = 未读未领
+          haveAttachments: Boolean(m.rewards && m.rewards.length),
+          rewards: m.rewards || []
+        };
+        role.mails.unshift(mailItem);
         added++;
         if (uid) {
           fetch('/api/mail', {
@@ -217,9 +236,37 @@
         if (window.w && window.g && window.g.Mail_Load) window.w.emit(window.g.Mail_Load);
       } catch (e) {}
       if (window.__updateMailBadge) window.__updateMailBadge(role.mailNewCount);
+      if (window.saveNow) window.saveNow();
     }
     window.__pendingCloudMails = [];
   }
+
+  function pullCloudMails(role) {
+    var r = role || (_user_mgr && _user_mgr.role) || (window._user_mgr_ && window._user_mgr_.role);
+    var uid = window.getCurrentPlayerUID ? window.getCurrentPlayerUID() : (localStorage.getItem('fe_player_uid') || '');
+    if (!uid) {
+      try {
+        var qUid = new URLSearchParams(location.search).get('uid');
+        if (qUid) uid = qUid.trim();
+      } catch (e) {}
+    }
+    if (!uid) uid = '1001';
+    return fetch('/api/sync?uid=' + encodeURIComponent(uid) + '&_t=' + Date.now(), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data && data.ok && Array.isArray(data.newMails) && data.newMails.length > 0) {
+          window.__pendingCloudMails = data.newMails;
+          if (r) {
+            mergeCloudMails(r);
+          }
+        }
+        return data;
+      })
+      .catch(function () { return null; });
+  }
+  window.__pullCloudMails = pullCloudMails;
+  // 间隔 25 秒温和轮询云端是否有新邮件到达
+  setInterval(function () { pullCloudMails(); }, 25000);
 
   window.__syncRuntimeBoards = function () { return syncRuntimeBoardsToRole(_user_mgr && _user_mgr.role); };
   window.__findRuntimeBoards = findRuntimeBoards; // 调试/测试钩子
@@ -2757,6 +2804,7 @@
     //有存档时等 rolelogin 恢复后再种(restoreSavedRole/loadOrderConfig 负责),
     //不在"恢复前窗口"碰 role
     if (!hasSavedRole() || restoreDone) ensureOrdersSeeded(role);
+    pullCloudMails(role);
     console.log('[mock-network] Role 数据已就绪, roleId:', role.id, 'MainBoard cells:', role.boards.get(1).cells.size, hasSavedRole() ? '(存档待 rolelogin 注入)' : '(全新开局)');
   }
 
@@ -3332,12 +3380,14 @@
       if (currentRole && gcmd === 'game_getmails') {
         ensureRoleMails(currentRole);
         ensureAllExtendedActivities(currentRole);
-        return Promise.resolve({
-          code: 0,
-          getData: function () {
-            return { mails: currentRole.mails || [] };
-          },
-          rawData: { code: 0 }
+        return pullCloudMails(currentRole).then(function () {
+          return {
+            code: 0,
+            getData: function () {
+              return { mails: currentRole.mails || [] };
+            },
+            rawData: { code: 0 }
+          };
         });
       }
       if (currentRole && gcmd === 'game_readmail') {
@@ -4690,7 +4740,7 @@
     return "✅ 成功向邮箱发送邮件 [ID: " + newId + "]：" + mail.title + " (含 " + mail.rewards.length + " 个附件)。打开信箱即可领取！";
   };
 
-  // 周期性确保周任务棋盘入口解锁
+  // 确保周任务棋盘入口解锁
   function hookWeekTaskEntranceUnlock() {
     if (window.config && window.config.WeekTaskActivity) {
       try {
@@ -4699,7 +4749,14 @@
       } catch (e) {}
     }
   }
-  setInterval(hookWeekTaskEntranceUnlock, 1000);
+  var wtAttempts = 0;
+  var wtTimer = setInterval(function () {
+    wtAttempts++;
+    hookWeekTaskEntranceUnlock();
+    if ((window.config && window.config.WeekTaskActivity) || wtAttempts > 20) {
+      clearInterval(wtTimer);
+    }
+  }, 1000);
 
   // 彻底关闭并隐藏微信订阅体系 (禁用 WxSubscribe 并在界面中完全隐藏菜单项与红点，杜绝 NeverUnlock 配置错误)
   function disableSubscribeSystem() {
@@ -4726,7 +4783,14 @@
       }
     } catch (e) {}
   }
-  setInterval(disableSubscribeSystem, 1000);
+  var subAttempts = 0;
+  var subTimer = setInterval(function () {
+    subAttempts++;
+    disableSubscribeSystem();
+    if ((window.config && window.config.Unlock) || subAttempts > 20) {
+      clearInterval(subTimer);
+    }
+  }, 1000);
 
   window.openSettingWindow = function () {
     var wm = window.WindowManager || (window.l3 && window.l3.showWindow && window.l3);

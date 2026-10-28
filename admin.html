@@ -139,7 +139,7 @@
     grid.innerHTML = '<div style="color: #64748b;">正在加载玩家列表...</div>';
 
     try {
-      const res = await fetch(`/api/admin?secret=${encodeURIComponent(secret)}`);
+      const res = await fetch(`/api/admin?secret=${encodeURIComponent(secret)}&_t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
       if (!data.ok) {
         grid.innerHTML = `<div style="color: #dc2626;">获取失败: ${data.error || '密钥错误'}</div>`;

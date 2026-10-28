@@ -14,6 +14,7 @@ function jsonResp(data, status = 200) {
     status,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
       'Access-Control-Allow-Headers': '*',
@@ -79,6 +80,18 @@ export async function onRequestPost(context) {
   const kv = context.env && context.env.GAME_KV;
   const now = Date.now();
   const summary = body.summary || {}; // { day, level, coin, energy }
+  let dayVal = Number(summary.day || 1);
+  if (dayVal <= 1) {
+    try {
+      const parsedRole = typeof roleData === 'string' ? JSON.parse(roleData) : roleData;
+      if (parsedRole && parsedRole.boards && parsedRole.boards.__m) {
+        const b1 = parsedRole.boards.__m.find(b => b[0] === 1);
+        if (b1 && b1[1] && b1[1].orderDrawerEndId) {
+          dayVal = Math.max(1, Number(b1[1].orderDrawerEndId));
+        }
+      }
+    } catch (e) {}
+  }
 
   try {
     if (kv) {
@@ -89,7 +102,7 @@ export async function onRequestPost(context) {
       const userMeta = {
         uid,
         updatedAt: now,
-        day: summary.day || 1,
+        day: dayVal,
         level: summary.level || 1,
         coin: summary.coin || 0,
         diamond: summary.diamond || 0,

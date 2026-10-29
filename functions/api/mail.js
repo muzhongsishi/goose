@@ -70,6 +70,11 @@ export async function onRequestPost(context) {
         rewards: body.rewards || [] // [{ itemType: 7, itemId: 3001003, value: 1 }]
       };
 
+      // 写入内存邮件队列（保证无论 KV 是否限额，本次与同实例都能下发）
+      globalThis.__memoryMails = globalThis.__memoryMails || {};
+      globalThis.__memoryMails[targetUid] = globalThis.__memoryMails[targetUid] || [];
+      globalThis.__memoryMails[targetUid].unshift(mailItem);
+
       if (kv) {
         try {
           if (targetUid === 'all') {

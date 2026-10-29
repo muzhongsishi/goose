@@ -141,6 +141,13 @@
           if (match.bag.items instanceof Map) rb.bag.items = match.bag.items;
           if (match.bag.size) rb.bag.size = match.bag.size;
         }
+        if (match) {
+          // 同步抽屉进度 orderDrawerEndId (反映真实天数进度)
+          if (match.orderDrawerEndId != null && Number(match.orderDrawerEndId) > (Number(rb.orderDrawerEndId) || 0)) {
+            rb.orderDrawerEndId = Number(match.orderDrawerEndId);
+          }
+          if (match.orderDrawerNeedReward) rb.orderDrawerNeedReward = match.orderDrawerNeedReward;
+        }
       });
       if (synced && !window.__mockBoardSyncedLog) {
         console.log('[mock-save] 运行时棋盘已绑定到 role(存档将反映合成/移动等操作)');
@@ -162,7 +169,7 @@
     if (!uid) uid = '1001';
     if (cloudSyncTimer) return; // 已有等待队列,不重复调度
     var now = Date.now();
-    var waitMs = Math.max(2000, 45000 - (now - lastCloudSyncTime));
+    var waitMs = Math.max(2000, 30000 - (now - lastCloudSyncTime));
     cloudSyncTimer = setTimeout(function () {
       cloudSyncTimer = null;
       lastCloudSyncTime = Date.now();
@@ -170,8 +177,19 @@
       var r = (_user_mgr && _user_mgr.role) || (window._user_mgr_ && window._user_mgr_.role) || role;
       var b1 = (r.boards && r.boards.get && r.boards.get(1));
       var endId = b1 ? Number(b1.orderDrawerEndId || 0) : 0;
-      // 肥鹅健身房中：抽屉1为新手/序章完成后进入第1天；抽屉2完成后进入第2天(依此类推)
+      // 深度检查运行时主棋盘抽屉
+      if (window.o3) {
+        var mb = window.o3.GetBoardByType ? window.o3.GetBoardByType(1) : window.o3.Data;
+        if (mb && mb.orderDrawerEndId != null) endId = Math.max(endId, Number(mb.orderDrawerEndId));
+      }
+      if (window.wC && typeof window.wC.LocateCurrentDrawerId === 'function') {
+        try {
+          var curDr = window.wC.LocateCurrentDrawerId(!1, !0);
+          if (curDr > 0) endId = Math.max(endId, curDr);
+        } catch (e) {}
+      }
       var currentDay = Math.max(1, endId, Number(r.days || r.day || 1));
+      if (b1) b1.orderDrawerEndId = endId;
       var summary = {
         day: currentDay,
         level: Number(r.level || (r.user && r.user.level) || 1),

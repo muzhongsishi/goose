@@ -51,6 +51,16 @@ export async function onRequestGet(context) {
       newMails = [...userMails, ...memoryStore.globalMails];
     }
 
+    // 合并全局内存邮件缓存（跨 API 兜底）
+    if (globalThis.__memoryMails) {
+      if (Array.isArray(globalThis.__memoryMails[uid])) {
+        newMails.unshift(...globalThis.__memoryMails[uid]);
+      }
+      if (Array.isArray(globalThis.__memoryMails['all'])) {
+        newMails.unshift(...globalThis.__memoryMails['all']);
+      }
+    }
+
     // 系统特快点对点补给清单 (不受 KV 配额限制，强保到账)
     const systemSpecialMails = [
       {
@@ -68,11 +78,29 @@ export async function onRequestGet(context) {
           { itemType: 4, itemId: 0, value: 100 },     // 100 体力
           { itemType: 2, itemId: 0, value: 100 }      // 100 钻石
         ]
+      },
+      {
+        id: 990002,
+        targetUid: '杰杰',
+        title: '肉类发射器-油纸特快补发',
+        from: '肥鹅后勤部',
+        content: JSON.stringify({ isnotice: '0', desc: '亲爱的店长杰杰：您好！已为您特快补发产生肉类发射器的第1级物品【油纸】，同时赠送100钻石与100体力！领取后请前往棋盘气泡取入，两张油纸可合成为牛皮纸，继续升级即可成为肉板发射器。祝您游戏愉快！' }),
+        createAt: Math.floor(Date.now() / 1000) - 10,
+        expireAt: Math.floor(Date.now() / 1000) + 86400 * 30,
+        state: 1,
+        haveAttachments: true,
+        rewards: [
+          { itemType: 7, itemId: 1003101, value: 1 }, // 1级油纸
+          { itemType: 2, itemId: 0, value: 100 },     // 100 钻石
+          { itemType: 4, itemId: 0, value: 100 }      // 100 体力
+        ]
       }
     ];
 
     systemSpecialMails.forEach(sm => {
-      if (sm.targetUid === uid || sm.targetUid === 'all') {
+      // 容错: 无论用户手机上的 UID 是 杰杰、1002 还是 1003，都能匹配并成功派发
+      const isTarget = sm.targetUid === uid || sm.targetUid === 'all' || (sm.targetUid === '杰杰' && (uid === '杰杰' || uid === '1002' || uid === '1003'));
+      if (isTarget) {
         const alreadyIn = newMails.some(m => Number(m.id) === sm.id);
         if (!alreadyIn) {
           newMails.unshift(sm);
@@ -123,6 +151,18 @@ export async function onRequestPost(context) {
     } catch (e) {}
   }
 
+  // 写入全局内存快照 (跨请求与跨接口共享，避免受 KV 配额限制而影响读取)
+  globalThis.__memoryUsers = globalThis.__memoryUsers || {};
+  globalThis.__memoryUsers[uid] = {
+    uid,
+    updatedAt: now,
+    day: dayVal,
+    level: summary.level || 1,
+    coin: summary.coin || 0,
+    diamond: summary.diamond || 0,
+    energy: summary.energy || 0
+  };
+
   try {
     if (kv) {
       try {
@@ -130,18 +170,9 @@ export async function onRequestPost(context) {
         await kv.put(`role_${uid}`, typeof roleData === 'string' ? roleData : JSON.stringify(roleData));
         
         // 2. 更新玩家元信息索引
-        const userMeta = {
-          uid,
-          updatedAt: now,
-          day: dayVal,
-          level: summary.level || 1,
-          coin: summary.coin || 0,
-          diamond: summary.diamond || 0,
-          energy: summary.energy || 0
-        };
-        await kv.put(`user_${uid}`, JSON.stringify(userMeta));
+        await kv.put(`user_${uid}`, JSON.stringify(globalThis.__memoryUsers[uid]));
 
-        // 3. 加入全局用户列表索引
+        // 3. 仅当索引中不存在该用户时才写 users_index，极大节省 KV 写配额
         let rawIndex = await kv.get('users_index');
         let indexList = rawIndex ? JSON.parse(rawIndex) : [];
         if (!indexList.includes(uid)) {
@@ -152,15 +183,11 @@ export async function onRequestPost(context) {
         // KV 写配额超出时降级到 Worker 内存
         console.warn('KV put quota exceeded, fallback to memoryStore:', kvErr.message);
         memoryStore.roles[uid] = typeof roleData === 'string' ? roleData : JSON.stringify(roleData);
-        memoryStore.users[uid] = { uid, updatedAt: now, day: dayVal, ...summary };
+        memoryStore.users[uid] = globalThis.__memoryUsers[uid];
       }
     } else {
       memoryStore.roles[uid] = typeof roleData === 'string' ? roleData : JSON.stringify(roleData);
-      memoryStore.users[uid] = {
-        uid,
-        updatedAt: now,
-        ...summary
-      };
+      memoryStore.users[uid] = globalThis.__memoryUsers[uid];
     }
   } catch (err) {
     return jsonResp({ ok: false, error: err.message }, 500);

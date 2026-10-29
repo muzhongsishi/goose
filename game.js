@@ -697,26 +697,14 @@ var _typeof2 = require("@babel/runtime/helpers/typeof");
             t = this,
             n = t.config,
             r = cc.director,
-            lastFrameTime = 0;
-          cc.debug.setDisplayStats(n.showFPS);
-          _e = function e(timestamp) {
+            o = !0,
+            i = n.frameRate;
+          cc.debug.setDisplayStats(n.showFPS), _e = function e() {
             if (!t._paused) {
-              t._intervalId = window.requestAnimFrame(_e);
-              var fps = n.frameRate || 60;
-              if (fps <= 60) {
-                var now = timestamp || (typeof performance !== 'undefined' ? performance.now() : Date.now());
-                var delta = now - lastFrameTime;
-                // 仅针对 >83Hz(如 120Hz ProMotion 屏幕)进行跳帧,绝对不误伤 60Hz 屏幕(如 iPhone 16 A18)的正常帧,彻底消除拖拽卡顿
-                if (delta < 12.0) {
-                  return;
-                }
-                lastFrameTime = now;
-              }
+              if (t._intervalId = window.requestAnimFrame(_e), 30 === i && !__globalAdapter.setPreferredFramesPerSecond && (o = !o)) return;
               r.mainLoop();
             }
-          };
-          t._intervalId = window.requestAnimFrame(_e);
-          t._paused = !1;
+          }, t._intervalId = window.requestAnimFrame(_e), t._paused = !1;
         }
       },
       _initRenderer: function _initRenderer() {
@@ -847,13 +835,10 @@ var _typeof2 = require("@babel/runtime/helpers/typeof");
 
     t.exports = function (e) {
       e._setupContainer = function (e, t, n) {
-        var dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2);
-        var r = e._devicePixelRatio = dpr;
-        if (typeof e.enableRetina === 'function') e.enableRetina(true);
-        if (!__globalAdapter.isSubContext) {
+        var r = e._devicePixelRatio = 1;
+        if (e.isRetinaEnabled() && (r = e._devicePixelRatio = Math.min(e._maxPixelRatio, window.devicePixelRatio || 1)), !__globalAdapter.isSubContext) {
           var o = cc.game.canvas;
-          t *= r, n *= r;
-          o.width === t && o.height === n || (o.width = t, o.height = n);
+          t *= r, n *= r, o.width === t && o.height === n || (o.width = t, o.height = n);
         }
       };
     };
@@ -3588,7 +3573,7 @@ var _typeof2 = require("@babel/runtime/helpers/typeof");
     var r = wx.getSystemInfoSync(),
       o = r.screenWidth,
       i = r.screenHeight,
-      a = r.devicePixelRatio || r.pixelRatio || (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+      a = r.devicePixelRatio;
     n.devicePixelRatio = a;
     var c = o;
     n.innerWidth = c;

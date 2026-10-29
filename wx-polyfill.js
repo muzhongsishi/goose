@@ -25,7 +25,7 @@
   var sysInfo = null;
   wx.getSystemInfoSync = function () {
     if (sysInfo) return sysInfo;
-    var dpr = Math.min(global.devicePixelRatio || 1, 2);
+    var dpr = 1; // 采用标准 1:1 设计分辨率,杜绝 300万像素 Retina 导致 GPU 片元着色器 100% 满负荷滚烫
     sysInfo = {
       model: 'Browser',
       brand: 'devtools',
@@ -463,9 +463,36 @@
   wx.connectSocket = function () { return { onOpen: function () {}, send: function () {}, close: function () {} }; };
   wx.createTCPSocket = function () { return { connect: function () {}, onMessage: function () {}, onConnect: function () {}, send: function () {}, close: function () {} }; };
 
-  // ---- 音频 ----
+  // ---- 音频引擎 (带 Audio Pool 保护, 杜绝 iOS mediaserverd 死锁、发热与发射器卡顿) ----
+  var MAX_AUDIO_INSTANCES = 4;
+  var audioPool = [];
+
+  function getPooledAudio() {
+    for (var i = 0; i < audioPool.length; i++) {
+      if (!audioPool[i].inUse) {
+        audioPool[i].inUse = true;
+        return audioPool[i];
+      }
+    }
+    if (audioPool.length < MAX_AUDIO_INSTANCES) {
+      var el = nativeCreateElement('audio');
+      var item = { el: el, inUse: true };
+      audioPool.push(item);
+      return item;
+    }
+    // 池满时复用最老的非循环实例
+    for (var j = 0; j < audioPool.length; j++) {
+      if (!audioPool[j].el.loop) {
+        audioPool[j].el.pause();
+        return audioPool[j];
+      }
+    }
+    return audioPool[0];
+  }
+
   wx.createInnerAudioContext = function () {
-    var audio = nativeCreateElement('audio');
+    var poolItem = getPooledAudio();
+    var audio = poolItem.el;
     var listeners = {};
     function addL(evt, fn) {
       if (!listeners[evt]) listeners[evt] = [];
@@ -482,15 +509,17 @@
       }
     }
 
-    audio.addEventListener('canplay', function () { emit('canplay'); });
-    audio.addEventListener('play', function () { emit('play'); });
-    audio.addEventListener('pause', function () { emit('pause'); });
-    audio.addEventListener('ended', function () { emit('ended'); });
-    audio.addEventListener('error', function (e) { emit('error', e); });
-    audio.addEventListener('timeupdate', function () { emit('timeupdate'); });
-    audio.addEventListener('waiting', function () { emit('waiting'); });
-    audio.addEventListener('seeking', function () { emit('seeking'); });
-    audio.addEventListener('seeked', function () { emit('seeked'); });
+    var onCanplayHandler = function () { emit('canplay'); };
+    var onPlayHandler = function () { emit('play'); };
+    var onPauseHandler = function () { emit('pause'); };
+    var onEndedHandler = function () { emit('ended'); };
+    var onErrorHandler = function (e) { emit('error', e); };
+
+    audio.oncanplay = onCanplayHandler;
+    audio.onplay = onPlayHandler;
+    audio.onpause = onPauseHandler;
+    audio.onended = onEndedHandler;
+    audio.onerror = onErrorHandler;
 
     var ctx = {
       set src(v) {
@@ -518,22 +547,33 @@
       get paused() { return audio.paused; },
       get buffered() { return audio.buffered ? (audio.buffered.length > 0 ? audio.buffered.end(0) : 0) : 0; },
       play: function () {
-        var p = audio.play();
-        if (p && p.catch) {
-          p.catch(function (e) {
-            console.warn('[InnerAudio play error]', e && e.message, audio.src);
-          });
-        }
+        try {
+          var p = audio.play();
+          if (p && p.catch) {
+            p.catch(function () {}); // 静默忽略自动播放拦截,杜绝主线程等待与卡顿
+          }
+        } catch (e) {}
       },
-      pause: function () { audio.pause(); },
-      stop: function () { audio.pause(); audio.currentTime = 0; emit('stop'); },
-      seek: function (t) { audio.currentTime = t; },
+      pause: function () { try { audio.pause(); } catch (e) {} },
+      stop: function () {
+        try {
+          audio.pause();
+          audio.currentTime = 0;
+        } catch (e) {}
+        emit('stop');
+      },
+      seek: function (t) { try { audio.currentTime = t; } catch (e) {} },
       destroy: function () {
-        audio.pause();
+        try { audio.pause(); } catch (e) {}
         if (audio.src && audio.src.indexOf('blob:') === 0) {
           try { URL.revokeObjectURL(audio.src); } catch (e) {}
         }
-        audio.src = '';
+        poolItem.inUse = false;
+        audio.oncanplay = null;
+        audio.onplay = null;
+        audio.onpause = null;
+        audio.onended = null;
+        audio.onerror = null;
         listeners = {};
       },
 

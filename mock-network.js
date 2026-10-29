@@ -169,7 +169,7 @@
     if (!uid) uid = '1001';
     if (cloudSyncTimer) return; // 已有等待队列,不重复调度
     var now = Date.now();
-    var waitMs = Math.max(2000, 30000 - (now - lastCloudSyncTime));
+    var waitMs = Math.max(2000, 35000 - (now - lastCloudSyncTime));
     cloudSyncTimer = setTimeout(function () {
       cloudSyncTimer = null;
       lastCloudSyncTime = Date.now();
@@ -214,7 +214,7 @@
       }).catch(function (e) {
         if (window.__updateCloudSyncStatus) window.__updateCloudSyncStatus('offline');
       });
-    }, 1200);
+    }, waitMs);
   }
 
   function mergeCloudMails(role) {
@@ -324,17 +324,8 @@
         return false;
       }
       syncRuntimeBoardsToRole(role);   // 先回填运行时棋盘,再序列化
-      // channel 不持久化(瞬态奖励载体,残留会导致重进棋盘重复飞入):序列化前摘除、
-      // 序列化后还原活体,既不落盘也不影响内存里待飞入的奖励
-      var transientChans = [];
-      role.boards.forEach(function (b) {
-        if (b && b.channel instanceof Map && b.channel.size > 0) {
-          transientChans.push([b, b.channel]);
-          b.channel = new Map();
-        }
-      });
+      // channel 必须持久化！绝不摘除，确保玩家在气泡未取出时离线/切后台/刷新不会丢失核心奖励
       var data = deepSerialize(role, 0);
-      transientChans.forEach(function (p) { p[0].channel = p[1]; });
       nativeLocalStorage.setItem(SAVE_KEY, JSON.stringify(data));
       window.__mockSaveCount = (window.__mockSaveCount || 0) + 1;
       scheduleCloudSync(role, data);
@@ -664,17 +655,28 @@
       });
       n++;
     });
+    // 立即同步到活体运行时主棋盘(o3.Data.channel), 确保左上角气泡界面即刻刷新并一致
+    try {
+      if (window.o3) {
+        var rtBoard = window.o3.GetBoardByType ? window.o3.GetBoardByType(1) : window.o3.Data;
+        if (rtBoard && rtBoard.channel instanceof Map && rtBoard.channel !== board.channel) {
+          (items || []).forEach(function (it) {
+            if (!it || it.itemType !== 7) return;
+            var ex = rtBoard.channel.get(it.itemId);
+            if (ex) ex.value = (ex.value || 0) + it.value;
+            else rtBoard.channel.set(it.itemId, {
+              id: it.itemId, itemType: 7, itemId: it.itemId,
+              value: it.value, state: 0, from: from || '', bagId: 0
+            });
+          });
+        }
+      }
+    } catch (e) {}
     return n;
   }
-  // channel 是瞬态奖励载体:真服把"待飞入的 element"写进 role.boards[main].channel,
-  //客户端 sendElementsToBoard 消费飞入棋盘 cells 后即清空。若 mock 侧残留(客户端
-  //消费的是它自己的 o3.Data.channel 副本,未回写 mock 活体),下次全量下发 role 会把
-  //残留 element 重新飞入 = "切回棋盘自动发奖励"。故:①落盘前摘除不持久化;②全量
-  //role 下发前清空(奖励飞入已完成的瞬态,清空不丢数据,element 已在 cells 里)
+  // channel 是通道奖励载体: 废弃暴力清空逻辑，保证未取出的奖励持久化不丢
   function stripTransientChannel(role) {
-    if (role && role.boards instanceof Map) role.boards.forEach(function (b) {
-      if (b && b.channel instanceof Map) b.channel = new Map();
-    });
+    // 已彻底禁用: 严禁清空未消费的 channel 奖励，确保用户离线/切后台/刷新绝不丢物品
   }
   // role.shop = Map<groupId, {aid, groupId, goods:[商品实例], refreshTime}>(ai 类 L7141)
   //是服务器下发的货架数据,真服必带;ElementDetailWindow 打开即调 oG.SearchElement

@@ -150,6 +150,7 @@
     } catch (e) { return false; }
   }
   var cloudSyncTimer = null;
+  var lastCloudSyncTime = 0;
   function scheduleCloudSync(role, serializedData) {
     var uid = window.getCurrentPlayerUID ? window.getCurrentPlayerUID() : (localStorage.getItem('fe_player_uid') || '');
     if (!uid) {
@@ -159,9 +160,12 @@
       } catch (e) {}
     }
     if (!uid) uid = '1001';
-    if (cloudSyncTimer) clearTimeout(cloudSyncTimer);
+    if (cloudSyncTimer) return; // 已有等待队列,不重复调度
+    var now = Date.now();
+    var waitMs = Math.max(2000, 45000 - (now - lastCloudSyncTime));
     cloudSyncTimer = setTimeout(function () {
       cloudSyncTimer = null;
+      lastCloudSyncTime = Date.now();
       if (window.__updateCloudSyncStatus) window.__updateCloudSyncStatus('syncing');
       var r = (_user_mgr && _user_mgr.role) || (window._user_mgr_ && window._user_mgr_.role) || role;
       var b1 = (r.boards && r.boards.get && r.boards.get(1));

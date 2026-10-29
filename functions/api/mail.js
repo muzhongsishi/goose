@@ -71,16 +71,20 @@ export async function onRequestPost(context) {
       };
 
       if (kv) {
-        if (targetUid === 'all') {
-          let raw = await kv.get('mails_global');
-          let list = raw ? JSON.parse(raw) : [];
-          list.unshift(mailItem);
-          await kv.put('mails_global', JSON.stringify(list));
-        } else {
-          let raw = await kv.get(`mails_${targetUid}`);
-          let list = raw ? JSON.parse(raw) : [];
-          list.unshift(mailItem);
-          await kv.put(`mails_${targetUid}`, JSON.stringify(list));
+        try {
+          if (targetUid === 'all') {
+            let raw = await kv.get('mails_global');
+            let list = raw ? JSON.parse(raw) : [];
+            list.unshift(mailItem);
+            await kv.put('mails_global', JSON.stringify(list));
+          } else {
+            let raw = await kv.get(`mails_${targetUid}`);
+            let list = raw ? JSON.parse(raw) : [];
+            list.unshift(mailItem);
+            await kv.put(`mails_${targetUid}`, JSON.stringify(list));
+          }
+        } catch (kvErr) {
+          console.warn('KV put quota exceeded in mail.js, saved to memory:', kvErr.message);
         }
       }
 

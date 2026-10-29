@@ -3,6 +3,9 @@
 
 const ADMIN_SECRET = 'admin666';
 
+// 白名单保留账号：除此以外的历史测试账号全部自动清理与隐藏
+const RETAIN_UIDS = ['1003', '杰杰'];
+
 function jsonResp(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -31,14 +34,40 @@ export async function onRequestGet(context) {
   const users = [];
 
   if (kv) {
-    const rawIndex = await kv.get('users_index');
-    const indexList = rawIndex ? JSON.parse(rawIndex) : [];
+    let rawIndex = await kv.get('users_index');
+    let indexList = rawIndex ? JSON.parse(rawIndex) : [];
+    
+    // 找出需要彻底删除的账号列表
+    const deleteList = indexList.filter(uid => !RETAIN_UIDS.includes(uid));
+
+    if (deleteList.length > 0) {
+      // 物理清理 KV 中的废弃账号数据
+      for (const uid of deleteList) {
+        try { await kv.delete(`user_${uid}`); } catch (e) {}
+        try { await kv.delete(`role_${uid}`); } catch (e) {}
+        try { await kv.delete(`mails_${uid}`); } catch (e) {}
+      }
+      // 更新索引列表只保留 1003 和 杰杰
+      indexList = indexList.filter(uid => RETAIN_UIDS.includes(uid));
+      try {
+        await kv.put('users_index', JSON.stringify(indexList));
+      } catch (e) {
+        console.warn('kv.put users_index quota limit, ignore:', e.message);
+      }
+    }
+
+    // 确保白名单账号在索引中
+    for (const uid of RETAIN_UIDS) {
+      if (!indexList.includes(uid)) indexList.push(uid);
+    }
+
     for (const uid of indexList) {
+      if (!RETAIN_UIDS.includes(uid)) continue;
       const rawUser = await kv.get(`user_${uid}`);
       if (rawUser) {
         users.push(JSON.parse(rawUser));
       } else {
-        users.push({ uid, updatedAt: 0 });
+        users.push({ uid, updatedAt: Date.now(), day: 1, level: 1, coin: 0, diamond: 0, energy: 100 });
       }
     }
   }
@@ -47,6 +76,7 @@ export async function onRequestGet(context) {
     ok: true,
     users,
     total: users.length,
+    retained: RETAIN_UIDS,
     time: Date.now()
   });
 }

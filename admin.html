@@ -119,6 +119,19 @@
           <span>⏱️ 加速券:</span>
           <input type="number" id="rewardSpeed" value="10" min="0">
         </div>
+        <div class="badge-input" style="flex: 2; min-width: 260px;">
+          <span>🧩 棋盘元素:</span>
+          <input type="number" id="rewardElemId" placeholder="元素ID如 3001003" style="width: 140px;">
+          <span>数量:</span>
+          <input type="number" id="rewardElemCount" value="1" min="1" style="width: 50px;">
+        </div>
+      </div>
+      <div style="margin-top: 8px; font-size: 12px; color: #94a3b8; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <span>快捷填入元素:</span>
+        <button type="button" style="background:#334155; padding:2px 8px; font-size:11px;" onclick="document.getElementById('rewardElemId').value=3001003">切菜板(3级 3001003)</button>
+        <button type="button" style="background:#334155; padding:2px 8px; font-size:11px;" onclick="document.getElementById('rewardElemId').value=3001002">砧板(2级 3001002)</button>
+        <button type="button" style="background:#334155; padding:2px 8px; font-size:11px;" onclick="document.getElementById('rewardElemId').value=3001001">菜板(1级 3001001)</button>
+        <button type="button" style="background:#334155; padding:2px 8px; font-size:11px;" onclick="document.getElementById('rewardElemId').value=1001104">蔬果篮(4级 1001104)</button>
       </div>
     </div>
 
@@ -224,12 +237,15 @@
     const coin = Number(document.getElementById('rewardCoin').value) || 0;
     const diamond = Number(document.getElementById('rewardDiamond').value) || 0;
     const speed = Number(document.getElementById('rewardSpeed').value) || 0;
+    const elemId = Number(document.getElementById('rewardElemId').value) || 0;
+    const elemCount = Number(document.getElementById('rewardElemCount').value) || 0;
 
     const rewards = [];
     if (coin > 0) rewards.push({ itemType: 1, itemId: 0, value: coin });
     if (diamond > 0) rewards.push({ itemType: 2, itemId: 0, value: diamond });
     if (energy > 0) rewards.push({ itemType: 4, itemId: 0, value: energy });
     if (speed > 0) rewards.push({ itemType: 5, itemId: 0, value: speed });
+    if (elemId > 0 && elemCount > 0) rewards.push({ itemType: 7, itemId: elemId, value: elemCount });
 
     statusMsg.className = 'status-msg';
     statusMsg.innerText = '正在发送中...';

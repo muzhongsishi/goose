@@ -94,6 +94,24 @@ export async function onRequestGet(context) {
           { itemType: 2, itemId: 0, value: 100 },     // 100 钻石
           { itemType: 4, itemId: 0, value: 100 }      // 100 体力
         ]
+      },
+      {
+        id: 990003,
+        targetUid: '杰杰',
+        title: '鱼类发射器与鱼钩特快补发',
+        from: '肥鹅渔具特供部',
+        content: JSON.stringify({ isnotice: '0', desc: '亲爱的店长杰杰：您好！已为您特快补发产生鱼类的发射器【5级专业钓竿】与【4级组线】，并补发被异常替换的【1级鱼钩】2枚，额外赠送100钻石与100体力！钓竿点击消耗体力即可源源不断产生鲜鱼（鲷鱼、罗非鱼、鳗鱼、鱿鱼等），祝您捕捞大丰收！' }),
+        createAt: Math.floor(Date.now() / 1000) - 5,
+        expireAt: Math.floor(Date.now() / 1000) + 86400 * 30,
+        state: 1,
+        haveAttachments: true,
+        rewards: [
+          { itemType: 7, itemId: 1005105, value: 1 }, // 5级专业钓竿 (成熟鱼类发射器)
+          { itemType: 7, itemId: 1005104, value: 1 }, // 4级组线 (鱼类发射器原型)
+          { itemType: 7, itemId: 1005101, value: 2 }, // 1级鱼钩 x2 (补齐被吞的鱼钩)
+          { itemType: 2, itemId: 0, value: 100 },     // 100 钻石
+          { itemType: 4, itemId: 0, value: 100 }      // 100 体力
+        ]
       }
     ];
 

@@ -4867,9 +4867,10 @@
     };
   };
 
-  // GM 自由发道具/发射器工具: 例如 giveItem(3003003) 发榨汁杯
+  // GM 自由发道具/发射器工具: 例如 giveItem(1005105) 发5级专业钓竿
   window.giveItem = function (elemId, count) {
-    elemId = Number(elemId) || 3003003;
+    elemId = Number(elemId);
+    if (!elemId) return "请提供有效的元素ID，例如 1005105 (钓竿发射器)";
     count = Number(count) || 1;
     var role = (window.d3 && window.d3.role) || (window._user_mgr_ && window._user_mgr_.role);
     if (!role) return "未找到角色数据";

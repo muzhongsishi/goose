@@ -835,10 +835,13 @@ var _typeof2 = require("@babel/runtime/helpers/typeof");
 
     t.exports = function (e) {
       e._setupContainer = function (e, t, n) {
-        var r = e._devicePixelRatio = 1;
-        if (e.isRetinaEnabled() && (r = e._devicePixelRatio = Math.min(e._maxPixelRatio, window.devicePixelRatio || 1)), !__globalAdapter.isSubContext) {
+        var dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2);
+        var r = e._devicePixelRatio = dpr;
+        if (typeof e.enableRetina === 'function') e.enableRetina(true);
+        if (!__globalAdapter.isSubContext) {
           var o = cc.game.canvas;
-          t *= r, n *= r, o.width === t && o.height === n || (o.width = t, o.height = n);
+          t *= r, n *= r;
+          o.width === t && o.height === n || (o.width = t, o.height = n);
         }
       };
     };

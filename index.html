@@ -413,6 +413,28 @@
     var __logs = [];
     window.__logs = __logs;
     window.__errs = [];
+    function __sendReport(type, detail) {
+      try {
+        if (typeof fetch === 'function') {
+          var payload = {
+            type: type,
+            detail: detail,
+            href: location.href,
+            dpr: window.devicePixelRatio,
+            screen: [screen.width, screen.height],
+            viewport: [window.innerWidth, window.innerHeight]
+          };
+          fetch('/api/report', {
+            method: 'POST',
+            keepalive: true,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          }).catch(function () {});
+        }
+      } catch (e) {}
+    }
+    window.__sendReport = __sendReport;
+
     function __log() {
       var args = Array.prototype.slice.call(arguments).map(function (a) {
         try { return typeof a === 'string' ? a : JSON.stringify(a); } catch (e) { return String(a); }
@@ -425,9 +447,11 @@
       try { (console.log || function () {}).apply(console, arguments); } catch (e) {}
     }
     window.addEventListener('error', function (e) {
-      __errs.push('[window.error] ' + e.message + ' @ ' + (e.filename||'') + ':' + e.lineno + ':' + e.colno);
+      var msg = '[window.error] ' + e.message + ' @ ' + (e.filename||'') + ':' + e.lineno + ':' + e.colno;
+      __errs.push(msg);
       if (e.error && e.error.stack) __errs.push(e.error.stack.split('\n').slice(0, 25).join('\n'));
       __log('[window.error]', e.message, '@', e.filename, e.lineno, e.colno);
+      __sendReport('js_error', { message: e.message, filename: e.filename, lineno: e.lineno, stack: e.error && e.error.stack });
     });
     window.addEventListener('unhandledrejection', function (e) {
       var msg = (e.reason && (e.reason.message || e.reason)) || '';
@@ -438,6 +462,7 @@
       }
       __errs.push('[unhandledrejection] ' + msg);
       __log('[unhandledrejection]', e.reason);
+      __sendReport('unhandled_promise', { reason: String(e.reason) });
     });
   </script>
 

@@ -25,7 +25,7 @@
   var sysInfo = null;
   wx.getSystemInfoSync = function () {
     if (sysInfo) return sysInfo;
-    var dpr = 1; // 采用标准 1:1 设计分辨率,杜绝 300万像素 Retina 导致 GPU 片元着色器 100% 满负荷滚烫
+    var dpr = Math.min(global.devicePixelRatio || 1, 2); // 恢复源码级 Retina 高清渲染
     sysInfo = {
       model: 'Browser',
       brand: 'devtools',
@@ -163,7 +163,7 @@
     }
   };
 
-  // ---- 触摸 & 鼠标统一输入事件系统 ----
+  // ---- 触摸 & 鼠标统一输入事件系统 (移动端原生 Touch + 桌面端 Mouse 完美解耦) ----
   var touchHandlers = {
     onTouchStart: [],
     onTouchMove: [],
@@ -191,101 +191,85 @@
     }
   }
 
-  var activeTouches = new Map();
-
-  function toTouchItem(e) {
-    return {
-      identifier: e.pointerId !== undefined ? e.pointerId : (e.identifier !== undefined ? e.identifier : 0),
-      clientX: e.clientX,
-      clientY: e.clientY,
-      pageX: e.pageX,
-      pageY: e.pageY,
-      force: e.pressure || 1
-    };
-  }
-
-  function getActiveTouchesList() {
+  function formatTouches(touchList) {
     var arr = [];
-    activeTouches.forEach(function (t) { arr.push(t); });
+    if (!touchList) return arr;
+    for (var i = 0; i < touchList.length; i++) {
+      var t = touchList[i];
+      arr.push({
+        identifier: t.identifier !== undefined ? t.identifier : i,
+        clientX: t.clientX,
+        clientY: t.clientY,
+        pageX: t.pageX,
+        pageY: t.pageY,
+        force: t.force || 1
+      });
+    }
     return arr;
   }
 
-  // 高性能触控批处理调度器 (支持 120Hz/240Hz 采样硬件与 WebKit 手势防死锁)
-  var pendingMoveTouches = null;
-  var pendingChangedTouches = null;
-  var moveRafId = null;
+  var isTouchDevice = ('ontouchstart' in global) || (navigator.maxTouchPoints > 0) || (navigator.msMaxTouchPoints > 0);
 
-  function flushPendingTouchMove() {
-    if (moveRafId) {
-      cancelAnimationFrame(moveRafId);
-      moveRafId = null;
+  if (isTouchDevice) {
+    // 移动端/触摸屏专属：直接原生 TouchEvent 映射,零延时、零 RAF 节流卡顿、零 WebKit 手势死锁
+    nativeAddEventListener('touchstart', function (e) {
+      if (e.target && e.target.closest && e.target.closest('#gm-toolbar')) return;
+      if (e.cancelable) e.preventDefault();
+      // 用户首次触控时顺手解锁 iOS Web Audio / Audio 状态
+      unlockAudioContext();
+      dispatchTouch('onTouchStart', formatTouches(e.touches), formatTouches(e.changedTouches));
+    }, { capture: true, passive: false });
+
+    nativeAddEventListener('touchmove', function (e) {
+      if (e.target && e.target.closest && e.target.closest('#gm-toolbar')) return;
+      if (e.cancelable) e.preventDefault();
+      // 关键性能优化：直接实时同步派发,彻底移除多余的 requestAnimationFrame 延迟,消除拖拽棋子严重滞后与跳帧
+      dispatchTouch('onTouchMove', formatTouches(e.touches), formatTouches(e.changedTouches));
+    }, { capture: true, passive: false });
+
+    nativeAddEventListener('touchend', function (e) {
+      if (e.target && e.target.closest && e.target.closest('#gm-toolbar')) return;
+      if (e.cancelable) e.preventDefault();
+      dispatchTouch('onTouchEnd', formatTouches(e.touches), formatTouches(e.changedTouches));
+    }, { capture: true, passive: false });
+
+    nativeAddEventListener('touchcancel', function (e) {
+      if (e.target && e.target.closest && e.target.closest('#gm-toolbar')) return;
+      dispatchTouch('onTouchCancel', formatTouches(e.touches), formatTouches(e.changedTouches));
+    }, { capture: true, passive: false });
+
+  } else {
+    // 桌面端鼠标专属：纯鼠标模拟 Touch
+    var isMouseDown = false;
+    nativeAddEventListener('mousedown', function (e) {
+      if (e.button !== 0) return;
+      if (e.target && e.target.closest && e.target.closest('#gm-toolbar')) return;
+      if (e.cancelable) e.preventDefault();
+      isMouseDown = true;
+      var t = { identifier: 0, clientX: e.clientX, clientY: e.clientY, pageX: e.pageX, pageY: e.pageY, force: 1 };
+      dispatchTouch('onTouchStart', [t], [t]);
+    }, { capture: true, passive: false });
+
+    nativeAddEventListener('mousemove', function (e) {
+      if (!isMouseDown) return;
+      if (e.cancelable) e.preventDefault();
+      var t = { identifier: 0, clientX: e.clientX, clientY: e.clientY, pageX: e.pageX, pageY: e.pageY, force: 1 };
+      dispatchTouch('onTouchMove', [t], [t]);
+    }, { capture: true, passive: false });
+
+    function handleMouseUp(e) {
+      if (!isMouseDown) return;
+      if (e.cancelable) e.preventDefault();
+      isMouseDown = false;
+      var t = { identifier: 0, clientX: e.clientX, clientY: e.clientY, pageX: e.pageX, pageY: e.pageY, force: 1 };
+      dispatchTouch('onTouchEnd', [], [t]);
     }
-    if (pendingMoveTouches && pendingChangedTouches) {
-      dispatchTouch('onTouchMove', pendingMoveTouches, pendingChangedTouches);
-      pendingMoveTouches = null;
-      pendingChangedTouches = null;
-    }
+
+    nativeAddEventListener('mouseup', handleMouseUp, { capture: true, passive: false });
   }
-
-  // 阻止移动端页面橡皮筋滚动与多指手势争抢
-  nativeAddEventListener('touchmove', function (e) {
-    if (e.cancelable && (!e.target || !e.target.closest || !e.target.closest('#gm-toolbar'))) {
-      e.preventDefault();
-    }
-  }, { passive: false });
-
-  // 使用原生 window/document 监听 PointerEvent (完美兼容电脑鼠标拖拽、手机触摸、手写笔)
-  nativeAddEventListener('pointerdown', function (e) {
-    if (e.button !== undefined && e.button !== 0) return;
-    // 如果点击的是开发者调试工具浮层,不透传给游戏画布
-    if (e.target && e.target.closest && e.target.closest('#gm-toolbar')) return;
-    if (e.cancelable) e.preventDefault();
-    flushPendingTouchMove();
-    var t = toTouchItem(e);
-    activeTouches.set(t.identifier, t);
-    dispatchTouch('onTouchStart', getActiveTouchesList(), [t]);
-  }, { capture: true, passive: false });
-
-  nativeAddEventListener('pointermove', function (e) {
-    var id = e.pointerId !== undefined ? e.pointerId : 0;
-    if (!activeTouches.has(id)) return;
-    if (e.cancelable) e.preventDefault();
-    var t = toTouchItem(e);
-    activeTouches.set(id, t);
-    pendingMoveTouches = getActiveTouchesList();
-    pendingChangedTouches = [t];
-    if (!moveRafId) {
-      moveRafId = requestAnimationFrame(function () {
-        moveRafId = null;
-        if (pendingMoveTouches && pendingChangedTouches) {
-          dispatchTouch('onTouchMove', pendingMoveTouches, pendingChangedTouches);
-          pendingMoveTouches = null;
-          pendingChangedTouches = null;
-        }
-      });
-    }
-  }, { capture: true, passive: false });
-
-  function handlePointerEnd(e, isCancel) {
-    var id = e.pointerId !== undefined ? e.pointerId : 0;
-    if (!activeTouches.has(id)) return;
-    if (e.cancelable) e.preventDefault();
-    flushPendingTouchMove();
-    var t = toTouchItem(e);
-    activeTouches.delete(id);
-    dispatchTouch(isCancel ? 'onTouchCancel' : 'onTouchEnd', getActiveTouchesList(), [t]);
-  }
-
-  nativeAddEventListener('pointerup', function (e) { handlePointerEnd(e, false); }, { capture: true, passive: false });
-  nativeAddEventListener('pointercancel', function (e) { handlePointerEnd(e, true); }, { capture: true, passive: false });
 
   global.addEventListener('blur', function () {
-    flushPendingTouchMove();
-    if (activeTouches.size > 0) {
-      var remaining = getActiveTouchesList();
-      activeTouches.clear();
-      dispatchTouch('onTouchCancel', [], remaining);
-    }
+    dispatchTouch('onTouchCancel', [], []);
   });
 
   // ---- 窗口/方向 ----
@@ -463,117 +447,214 @@
   wx.connectSocket = function () { return { onOpen: function () {}, send: function () {}, close: function () {} }; };
   wx.createTCPSocket = function () { return { connect: function () {}, onMessage: function () {}, onConnect: function () {}, send: function () {}, close: function () {} }; };
 
-  // ---- 音频引擎 (带 Audio Pool 保护, 杜绝 iOS mediaserverd 死锁、发热与发射器卡顿) ----
-  var MAX_AUDIO_INSTANCES = 4;
-  var audioPool = [];
-
-  function getPooledAudio() {
-    for (var i = 0; i < audioPool.length; i++) {
-      if (!audioPool[i].inUse) {
-        audioPool[i].inUse = true;
-        return audioPool[i];
+  // ---- 终极高性能音频引擎 (Web Audio 解码音效 + 独立 BGM 通道, 彻底终结 iOS mediaserverd 阻塞、发热与发射器卡顿) ----
+  var webAudioCtx = null;
+  function getWebAudioContext() {
+    if (!webAudioCtx && typeof window !== 'undefined') {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) {
+        try { webAudioCtx = new AC(); } catch (e) {}
       }
     }
-    if (audioPool.length < MAX_AUDIO_INSTANCES) {
-      var el = nativeCreateElement('audio');
-      var item = { el: el, inUse: true };
-      audioPool.push(item);
-      return item;
-    }
-    // 池满时复用最老的非循环实例
-    for (var j = 0; j < audioPool.length; j++) {
-      if (!audioPool[j].el.loop) {
-        audioPool[j].el.pause();
-        return audioPool[j];
-      }
-    }
-    return audioPool[0];
+    return webAudioCtx;
   }
 
+  function unlockAudioContext() {
+    var ac = getWebAudioContext();
+    if (ac && ac.state === 'suspended') {
+      ac.resume().catch(function () {});
+    }
+  }
+
+  // 短音效解码缓存 Map: url -> AudioBuffer
+  var sfxBufferCache = new Map();
+
   wx.createInnerAudioContext = function () {
-    var poolItem = getPooledAudio();
-    var audio = poolItem.el;
+    var isDestroyed = false;
+    var currentSrc = '';
+    var isLoop = false;
+    var currentVolume = 1;
+    var isAutoplay = false;
     var listeners = {};
+    var htmlAudio = null; // 仅当需要长播放或流式播放时才懒加载 HTML5 Audio
+    var activeSourceNode = null;
+    var isPaused = true;
+    var duration = 0;
+    var currentTime = 0;
+
     function addL(evt, fn) {
       if (!listeners[evt]) listeners[evt] = [];
       listeners[evt].push(fn);
     }
     function removeL(evt, fn) {
-      if (listeners[evt]) {
-        listeners[evt] = listeners[evt].filter(function (f) { return f !== fn; });
-      }
+      if (listeners[evt]) listeners[evt] = listeners[evt].filter(function (f) { return f !== fn; });
     }
     function emit(evt, arg) {
+      if (isDestroyed) return;
       if (listeners[evt]) {
         listeners[evt].forEach(function (f) { try { f(arg); } catch (e) {} });
       }
     }
 
-    var onCanplayHandler = function () { emit('canplay'); };
-    var onPlayHandler = function () { emit('play'); };
-    var onPauseHandler = function () { emit('pause'); };
-    var onEndedHandler = function () { emit('ended'); };
-    var onErrorHandler = function (e) { emit('error', e); };
-
-    audio.oncanplay = onCanplayHandler;
-    audio.onplay = onPlayHandler;
-    audio.onpause = onPauseHandler;
-    audio.onended = onEndedHandler;
-    audio.onerror = onErrorHandler;
+    function getOrCreateHtmlAudio() {
+      if (!htmlAudio) {
+        htmlAudio = nativeCreateElement('audio');
+        htmlAudio.oncanplay = function () { emit('canplay'); };
+        htmlAudio.onplay = function () { isPaused = false; emit('play'); };
+        htmlAudio.onpause = function () { isPaused = true; emit('pause'); };
+        htmlAudio.onended = function () { isPaused = true; emit('ended'); };
+        htmlAudio.onerror = function (e) { emit('error', e); };
+      }
+      return htmlAudio;
+    }
 
     var ctx = {
       set src(v) {
+        if (isDestroyed) return;
+        currentSrc = v || '';
         var key = typeof v === 'string' ? v.replace(/^wxfile:\/\/usr\//, '') : '';
         if (key && fsStore[key]) {
           var buf = fsStore[key];
-          var blob = new Blob([buf], { type: 'audio/mpeg' });
-          audio.src = URL.createObjectURL(blob);
-          return;
+          // 优先尝试 Web Audio 异步解码缓存
+          var ac = getWebAudioContext();
+          if (ac && ac.decodeAudioData) {
+            ac.decodeAudioData(buf.slice(0), function (decoded) {
+              sfxBufferCache.set(currentSrc, decoded);
+              duration = decoded.duration;
+              emit('canplay');
+            }, function () {
+              // 解码异常时回退到 Blob URL
+              var blob = new Blob([buf], { type: 'audio/mpeg' });
+              var el = getOrCreateHtmlAudio();
+              el.src = URL.createObjectURL(blob);
+            });
+            return;
+          }
         }
         if (typeof v === 'string' && v.indexOf('wxfile://usr/') === 0) {
           v = '/' + v.slice('wxfile://usr/'.length);
         }
-        audio.src = v;
+        // 如果是外部 URL,在真正 play 或 loop 时再分配底层元素
+        if (htmlAudio || isLoop) {
+          getOrCreateHtmlAudio().src = v;
+        }
       },
-      get src() { return audio.src; },
-      set loop(v) { audio.loop = !!v; },
-      get loop() { return audio.loop; },
-      set volume(v) { audio.volume = v; },
-      get volume() { return audio.volume; },
-      set autoplay(v) { audio.autoplay = !!v; },
-      get autoplay() { return audio.autoplay; },
-      get duration() { return audio.duration || 0; },
-      get currentTime() { return audio.currentTime || 0; },
-      get paused() { return audio.paused; },
-      get buffered() { return audio.buffered ? (audio.buffered.length > 0 ? audio.buffered.end(0) : 0) : 0; },
+      get src() { return currentSrc; },
+      set loop(v) {
+        isLoop = !!v;
+        if (htmlAudio) htmlAudio.loop = isLoop;
+      },
+      get loop() { return isLoop; },
+      set volume(v) {
+        currentVolume = v;
+        if (htmlAudio) htmlAudio.volume = v;
+      },
+      get volume() { return currentVolume; },
+      set autoplay(v) { isAutoplay = !!v; },
+      get autoplay() { return isAutoplay; },
+      get duration() { return htmlAudio ? (htmlAudio.duration || duration) : duration; },
+      get currentTime() { return htmlAudio ? (htmlAudio.currentTime || currentTime) : currentTime; },
+      get paused() { return isPaused; },
+      get buffered() { return htmlAudio && htmlAudio.buffered && htmlAudio.buffered.length > 0 ? htmlAudio.buffered.end(0) : 0; },
+
       play: function () {
+        if (isDestroyed || !currentSrc) return;
+        unlockAudioContext();
+        var ac = getWebAudioContext();
+
+        // 策略 1：如果已有 Web Audio 解码缓存且非长循环，直接走 Web Audio BufferSource (0延迟、0 IPC 开销、绝不发热)
+        if (ac && !isLoop && sfxBufferCache.has(currentSrc)) {
+          try {
+            var buffer = sfxBufferCache.get(currentSrc);
+            if (activeSourceNode) {
+              try { activeSourceNode.stop(); } catch (e) {}
+            }
+            var source = ac.createBufferSource();
+            var gainNode = ac.createGain ? ac.createGain() : null;
+            source.buffer = buffer;
+            if (gainNode) {
+              gainNode.gain.value = currentVolume;
+              source.connect(gainNode);
+              gainNode.connect(ac.destination);
+            } else {
+              source.connect(ac.destination);
+            }
+            source.onended = function () {
+              isPaused = true;
+              emit('ended');
+            };
+            source.start(0);
+            activeSourceNode = source;
+            isPaused = false;
+            emit('play');
+            return;
+          } catch (e) {
+            // 回退到 HTMLAudio
+          }
+        }
+
+        // 策略 2：长循环 BGM 或流媒体回退到 HTMLAudio
+        var el = getOrCreateHtmlAudio();
+        if (el.src !== currentSrc) el.src = currentSrc;
+        el.loop = isLoop;
+        el.volume = currentVolume;
         try {
-          var p = audio.play();
+          var p = el.play();
           if (p && p.catch) {
-            p.catch(function () {}); // 静默忽略自动播放拦截,杜绝主线程等待与卡顿
+            p.catch(function () {});
           }
         } catch (e) {}
       },
-      pause: function () { try { audio.pause(); } catch (e) {} },
+
+      pause: function () {
+        isPaused = true;
+        if (activeSourceNode) {
+          try { activeSourceNode.stop(); activeSourceNode = null; } catch (e) {}
+        }
+        if (htmlAudio) {
+          try { htmlAudio.pause(); } catch (e) {}
+        }
+        emit('pause');
+      },
+
       stop: function () {
-        try {
-          audio.pause();
-          audio.currentTime = 0;
-        } catch (e) {}
+        isPaused = true;
+        currentTime = 0;
+        if (activeSourceNode) {
+          try { activeSourceNode.stop(); activeSourceNode = null; } catch (e) {}
+        }
+        if (htmlAudio) {
+          try {
+            htmlAudio.pause();
+            htmlAudio.currentTime = 0;
+          } catch (e) {}
+        }
         emit('stop');
       },
-      seek: function (t) { try { audio.currentTime = t; } catch (e) {} },
-      destroy: function () {
-        try { audio.pause(); } catch (e) {}
-        if (audio.src && audio.src.indexOf('blob:') === 0) {
-          try { URL.revokeObjectURL(audio.src); } catch (e) {}
+
+      seek: function (t) {
+        currentTime = t;
+        if (htmlAudio) {
+          try { htmlAudio.currentTime = t; } catch (e) {}
         }
-        poolItem.inUse = false;
-        audio.oncanplay = null;
-        audio.onplay = null;
-        audio.onpause = null;
-        audio.onended = null;
-        audio.onerror = null;
+      },
+
+      destroy: function () {
+        isDestroyed = true;
+        this.stop();
+        if (htmlAudio) {
+          htmlAudio.oncanplay = null;
+          htmlAudio.onplay = null;
+          htmlAudio.onpause = null;
+          htmlAudio.onended = null;
+          htmlAudio.onerror = null;
+          if (htmlAudio.src && htmlAudio.src.indexOf('blob:') === 0) {
+            try { URL.revokeObjectURL(htmlAudio.src); } catch (e) {}
+          }
+          htmlAudio.src = '';
+          htmlAudio = null;
+        }
+        activeSourceNode = null;
         listeners = {};
       },
 
@@ -583,8 +664,6 @@
       offPlay: function (fn) { removeL('play', fn); },
       onPause: function (fn) { addL('pause', fn); },
       offPause: function (fn) { removeL('pause', fn); },
-      onStop: function (fn) { addL('stop', fn); },
-      offStop: function (fn) { removeL('stop', fn); },
       onEnded: function (fn) { addL('ended', fn); },
       offEnded: function (fn) { removeL('ended', fn); },
       onError: function (fn) { addL('error', fn); },
@@ -598,6 +677,7 @@
       onSeeked: function (fn) { addL('seeked', fn); },
       offSeeked: function (fn) { removeL('seeked', fn); }
     };
+
     return ctx;
   };
   wx.onAudioInterruptionBegin = function () {};

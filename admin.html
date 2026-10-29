@@ -125,11 +125,46 @@
     <button onclick="sendMail()" style="padding: 10px 24px; font-size: 15px; margin-top: 10px;">🚀 立即发送邮件到信箱</button>
     <div id="statusMsg" class="status-msg"></div>
   </div>
+
+  <!-- 真机实时报错与性能诊断面板 -->
+  <div class="card" style="margin-top: 20px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h3 style="margin:0; font-size:16px;">📱 移动端真机报错与性能诊断</h3>
+      <button onclick="loadReports()" style="background:#475569; padding:6px 14px; font-size:12px;">🔄 刷新真机上报</button>
+    </div>
+    <div id="reportsList" style="font-family: monospace; font-size: 12px; background: #0f172a; padding: 12px; border-radius: 8px; max-height: 250px; overflow-y: auto; color: #94a3b8; white-space: pre-wrap;">点击右上角按钮获取真机报错记录...</div>
+  </div>
 </div>
 
 <script>
   function getSecret() {
     return document.getElementById('secretInput').value.trim();
+  }
+
+  async function loadReports() {
+    const listEl = document.getElementById('reportsList');
+    listEl.innerText = '正在拉取真机日志...';
+    try {
+      const res = await fetch(`/api/report?_t=${Date.now()}`);
+      const data = await res.json();
+      if (!data.ok) {
+        listEl.innerText = '获取失败: ' + (data.error || '未知错误');
+        return;
+      }
+      if (!data.reports || data.reports.length === 0) {
+        listEl.innerText = '✅ 暂无任何客户端异常报错记录 (真机运行平稳)';
+        return;
+      }
+      listEl.innerHTML = data.reports.map(r => {
+        return `<div style="border-bottom: 1px solid #1e293b; padding-bottom: 6px; margin-bottom: 6px;">
+<span style="color:#38bdf8;">[${r.time}]</span> <span style="color:#f59e0b;">${r.data && r.data.type || 'log'}</span>
+<span style="color:#64748b;">UA: ${r.ua || '未知'}</span>
+<div style="color:#ef4444; margin-top:3px;">${JSON.stringify(r.data && r.data.detail, null, 2)}</div>
+</div>`;
+      }).join('');
+    } catch (e) {
+      listEl.innerText = '拉取异常: ' + e.message;
+    }
   }
 
   async function loadUsers() {

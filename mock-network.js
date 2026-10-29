@@ -2330,6 +2330,122 @@
     ensureRoleBumperCar(role);
   }
 
+  function applyPropUse(role, params) {
+    syncRuntimeBoardsToRole(role);
+    var b = getBoardFor(role, params && params.boardId);
+    if (!b || !(b.cells instanceof Map)) return { ok: true, cells: [] };
+
+    var fromIdx = Number(params && params.index);
+    var toIdx = Number(params && params.toIndex);
+    var fromCell = b.cells.get(fromIdx);
+    var fromElemId = (fromCell && Number(fromCell.elementId)) || 0;
+    console.log('[mock-propuse] 使用道具/礼盒: fromIdx=' + fromIdx + ' (elem=' + fromElemId + ') toIdx=' + toIdx);
+
+    var updatedCells = [];
+
+    // A. 神秘礼盒领奖 (MagicBoxWindow 领取时发送 extra: [{ idx: selectIndex, cell: { elementId, index } }])
+    if (Array.isArray(params && params.extra) && params.extra.length > 0) {
+      var ex = params.extra[0];
+      if (ex && ex.cell) {
+        var claimedIdx = Number(ex.cell.index);
+        var claimedElemId = Number(ex.cell.elementId);
+        console.log('[mock-propuse] 神秘礼盒领奖: index=' + claimedIdx + ' elem=' + claimedElemId);
+
+        // 移除原礼盒格子
+        b.cells.delete(fromIdx);
+        updatedCells.push({ index: fromIdx, elementId: 0 });
+
+        // 放置自选的奖励元素
+        var newCell = {
+          index: claimedIdx,
+          elementId: claimedElemId,
+          state: 0,
+          seed: Math.floor(Math.random() * 1000000),
+          productType: 2 // manualProduct
+        };
+        b.cells.set(claimedIdx, newCell);
+        updatedCells.push(newCell);
+        return { ok: true, cells: updatedCells };
+      }
+    }
+
+    // B. 食材包点击发射 (AutoBoxElement: 5003001, 5003002)
+    if (fromElemId === 5003001 || fromElemId === 5003002) {
+      var fixedList = fromElemId === 5003001 
+        ? ['FoodBox_20', 'FoodBox_20', 'ELE_6200012', 'ELE_6200012']
+        : ['FoodBox_20', 'FoodBox_20', 'FoodBox_40', 'FoodBox_20', 'FoodBox_20'];
+
+      fromCell.productCount = Number(fromCell.productCount || 0);
+      var poolKey = fixedList[fromCell.productCount % fixedList.length];
+      
+      // 确定掉落物 ID
+      var droppedElemId = 1001204;
+      if (poolKey === 'ELE_6200012') {
+        droppedElemId = 6200012; // 2级体力瓶
+      } else if (poolKey === 'FoodBox_40') {
+        // 6级高阶蔬菜/肉类/冷柜优质食材
+        var f40Pool = [1001206, 1001304, 1003206, 1003304, 1002206, 1002303];
+        droppedElemId = f40Pool[Math.floor(Math.random() * f40Pool.length)];
+      } else {
+        // FoodBox_20: 4~5级常用优质食材
+        var f20Pool = [1001204, 1001205, 1001302, 1003204, 1003205, 1002204, 1002205];
+        droppedElemId = f20Pool[Math.floor(Math.random() * f20Pool.length)];
+      }
+
+      // 如果客户端传了有效掉落物 ID，优先尊重
+      if (Array.isArray(params && params.product) && params.product.length > 0) {
+        var cliElemId = Number(params.product[0].elementId);
+        if (cliElemId > 0) droppedElemId = cliElemId;
+      }
+
+      // 递增计数
+      fromCell.productCount++;
+      console.log('[mock-propuse] 食材包生成物: dropped=' + droppedElemId + ' count=' + fromCell.productCount + '/' + fixedList.length);
+
+      // 放置新格子
+      var targetCell = {
+        index: toIdx,
+        elementId: droppedElemId,
+        state: 0,
+        seed: Math.floor(Math.random() * 1000000),
+        productType: 2
+      };
+      b.cells.set(toIdx, targetCell);
+      updatedCells.push(targetCell);
+
+      // 如果发射次数耗尽，移除食材包
+      if (fromCell.productCount >= fixedList.length) {
+        console.log('[mock-propuse] 食材包次数用尽，移除格子: ' + fromIdx);
+        b.cells.delete(fromIdx);
+        updatedCells.push({ index: fromIdx, elementId: 0 });
+      } else {
+        updatedCells.push(fromCell);
+      }
+      return { ok: true, cells: updatedCells };
+    }
+
+    // C. 其它通用道具（如直接消耗的道具）
+    if (fromElemId > 0 && (!toIdx || toIdx === 0)) {
+      b.cells.delete(fromIdx);
+      updatedCells.push({ index: fromIdx, elementId: 0 });
+    }
+
+    return { ok: true, cells: updatedCells };
+  }
+
+  function applyCellSell(role, params) {
+    syncRuntimeBoardsToRole(role);
+    var b = getBoardFor(role, params && params.boardId);
+    if (!b || !(b.cells instanceof Map)) return { ok: true };
+
+    var sIdx = Number(params && params.index);
+    if (b.cells.has(sIdx)) {
+      var cell = b.cells.get(sIdx);
+      console.log('[mock-cellsell] 出售格子: index=' + sIdx + ' elemId=' + (cell && cell.elementId));
+      b.cells.delete(sIdx);
+    }
+    return { ok: true };
+  }
 
   function applyCellMove(role, params) {
     syncRuntimeBoardsToRole(role);
@@ -3174,6 +3290,78 @@
             };
           },
           rawData: { code: cmRes.ok ? 0 : 1 }
+        }).then(function (r) { scheduleSave(); return r; });
+      }
+      if (currentRole && gcmd === 'game_cellinfo') {
+        syncRuntimeBoardsToRole(currentRole);
+        var b = getBoardFor(currentRole, t.params && t.params.boardId);
+        var cIdx = Number(t.params && t.params.index);
+        var curCell = b && b.cells && b.cells.get(cIdx);
+        var elemId = (curCell && Number(curCell.elementId)) || 0;
+        console.log('[mock-cellinfo] 神秘礼盒查询详情: index=' + cIdx + ' elemId=' + elemId);
+
+        var candidates = [];
+        if (elemId === 5004001) {
+          // 普通神秘礼盒: 4级常用食材与体力胶囊
+          candidates = [1001204, 1003204, 6200012];
+        } else if (elemId === 5004002) {
+          // 高级神秘礼盒: 5级优质食材与中级体力
+          candidates = [1001205, 1003205, 6200013];
+        } else if (elemId === 5004003) {
+          // 至尊神秘礼盒: 6级高阶食材与高级体力
+          candidates = [1001206, 1003206, 6200014];
+        } else {
+          candidates = [1001204, 1003204, 6200012];
+        }
+
+        return Promise.resolve({
+          code: 0,
+          getData: function () {
+            return {
+              role: currentRole,
+              cellInfo: {
+                elements: candidates
+              }
+            };
+          },
+          rawData: {
+            code: 0,
+            cellInfo: {
+              elements: candidates
+            }
+          }
+        });
+      }
+      if (currentRole && gcmd === 'game_propuse') {
+        var puRes = applyPropUse(currentRole, t.params);
+        return Promise.resolve({
+          code: puRes.ok ? 0 : 1,
+          error: puRes.error || '',
+          getData: function () {
+            return {
+              role: currentRole,
+              cells: puRes.cells || []
+            };
+          },
+          rawData: {
+            code: puRes.ok ? 0 : 1,
+            cells: puRes.cells || []
+          }
+        }).then(function (r) { scheduleSave(); return r; });
+      }
+      if (currentRole && gcmd === 'game_cellsell') {
+        var csRes = applyCellSell(currentRole, t.params);
+        return Promise.resolve({
+          code: csRes.ok ? 0 : 1,
+          error: csRes.error || '',
+          getData: function () {
+            return {
+              role: currentRole
+            };
+          },
+          rawData: {
+            code: csRes.ok ? 0 : 1
+          }
         }).then(function (r) { scheduleSave(); return r; });
       }
       if (currentRole && gcmd === 'game_multiplecellmove') {
@@ -4829,6 +5017,39 @@
     disableSubscribeSystem();
     if ((window.config && window.config.Unlock) || subAttempts > 20) {
       clearInterval(subTimer);
+    }
+  }, 1000);
+
+  // 补丁: 激活食材包与神秘礼盒的交互/出售属性，杜绝格子永久卡死
+  function hookChestInteraction() {
+    try {
+      if (!window.config || !window.config.Element || typeof window.config.Element.getById !== 'function') return false;
+      var chestIds = [5003001, 5003002, 5004001, 5004002, 5004003];
+      var patched = 0;
+      chestIds.forEach(function (id) {
+        var conf = window.config.Element.getById(id);
+        if (conf) {
+          if (!conf.sellPrice || (conf.sellPrice instanceof Map && conf.sellPrice.size === 0) || (typeof conf.sellPrice === 'object' && Object.keys(conf.sellPrice).length === 0)) {
+            if (conf.sellPrice instanceof Map) {
+              conf.sellPrice.set('Energy', 1);
+            } else {
+              conf.sellPrice = { Energy: 1 };
+            }
+          }
+          patched++;
+        }
+      });
+      return patched > 0;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  var chestAttempts = 0;
+  var chestTimer = setInterval(function () {
+    chestAttempts++;
+    if (hookChestInteraction() || chestAttempts > 30) {
+      clearInterval(chestTimer);
     }
   }, 1000);
 

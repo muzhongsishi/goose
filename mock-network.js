@@ -204,18 +204,34 @@
       if (!m || !m.id) return;
       var exists = role.mails.some(function (ex) { return Number(ex.id) === Number(m.id); });
       if (!exists) {
-        var contentObj = m.content;
-        if (typeof contentObj === 'string') {
-          try { contentObj = JSON.parse(contentObj); } catch (e) {}
+        var contentStr = '';
+        if (typeof m.content === 'string') {
+          contentStr = m.content;
+          try {
+            JSON.parse(contentStr);
+          } catch (e) {
+            contentStr = JSON.stringify({ isnotice: '0', desc: m.content || '店长辛苦了！特意为您准备了补给物资，请查收！' });
+          }
+        } else if (typeof m.content === 'object' && m.content !== null) {
+          contentStr = JSON.stringify(m.content);
+        } else {
+          contentStr = JSON.stringify({ isnotice: '0', desc: '店长辛苦了！特意为您准备了补给物资，请查收！' });
         }
+        var nowMs = Date.now();
+        var createTime = m.createdAt || m.createAt || (nowMs - 60000);
+        var createMs = Number(createTime) < 1e11 ? Number(createTime) * 1000 : Number(createTime);
+        var expireTime = m.expireAt || (nowMs + 86400 * 30 * 1000);
+        var expireMs = Number(expireTime) < 1e11 ? Number(expireTime) * 1000 : Number(expireTime);
+
         var mailItem = {
           id: Number(m.id),
           title: m.title || '系统福利补给',
           from: m.from || '肥鹅后勤部',
-          content: contentObj || { isnotice: '0', desc: '店长辛苦了！特意为您准备了补给物资，请查收！' },
-          createAt: m.createAt || Math.floor(Date.now() / 1000),
-          expireAt: m.expireAt || (Math.floor(Date.now() / 1000) + 86400 * 30),
-          state: 1, // 1 = 未读未领
+          content: contentStr,
+          createdAt: createMs,
+          createAt: Math.floor(createMs / 1000),
+          expireAt: expireMs,
+          state: 1, // 1 = yr.newMail (未读未领)
           haveAttachments: Boolean(m.rewards && m.rewards.length),
           rewards: m.rewards || []
         };
@@ -1662,7 +1678,20 @@
     }
     var unread = 0;
     role.mails.forEach(function (m) {
-      if (m && Number(m.state) < 3) unread++;
+      if (!m) return;
+      // 客户端要求 content 必须为合法 JSON 字符串
+      if (typeof m.content === 'object' && m.content !== null) {
+        m.content = JSON.stringify(m.content);
+      } else if (typeof m.content !== 'string' || !m.content) {
+        m.content = JSON.stringify({ isnotice: '0', desc: '店长辛苦了！特意为您准备了补给物资，请查收！' });
+      }
+      if (!m.createdAt && m.createAt) {
+        m.createdAt = Number(m.createAt) < 1e11 ? Number(m.createAt) * 1000 : Number(m.createAt);
+      }
+      if (m.expireAt && Number(m.expireAt) < 1e11) {
+        m.expireAt = Number(m.expireAt) * 1000;
+      }
+      if (Number(m.state) < 3) unread++;
     });
     role.mailNewCount = unread;
     mergeCloudMails(role);
@@ -3381,6 +3410,13 @@
         ensureRoleMails(currentRole);
         ensureAllExtendedActivities(currentRole);
         return pullCloudMails(currentRole).then(function () {
+          if (Array.isArray(currentRole.mails)) {
+            currentRole.mails.forEach(function (m) {
+              if (m && typeof m.content === 'object' && m.content !== null) {
+                m.content = JSON.stringify(m.content);
+              }
+            });
+          }
           return {
             code: 0,
             getData: function () {

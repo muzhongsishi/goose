@@ -210,11 +210,37 @@
     return arr;
   }
 
+  // 高性能触控批处理调度器 (支持 120Hz/240Hz 采样硬件与 WebKit 手势防死锁)
+  var pendingMoveTouches = null;
+  var pendingChangedTouches = null;
+  var moveRafId = null;
+
+  function flushPendingTouchMove() {
+    if (moveRafId) {
+      cancelAnimationFrame(moveRafId);
+      moveRafId = null;
+    }
+    if (pendingMoveTouches && pendingChangedTouches) {
+      dispatchTouch('onTouchMove', pendingMoveTouches, pendingChangedTouches);
+      pendingMoveTouches = null;
+      pendingChangedTouches = null;
+    }
+  }
+
+  // 阻止移动端页面橡皮筋滚动与多指手势争抢
+  nativeAddEventListener('touchmove', function (e) {
+    if (e.cancelable && (!e.target || !e.target.closest || !e.target.closest('#gm-toolbar'))) {
+      e.preventDefault();
+    }
+  }, { passive: false });
+
   // 使用原生 window/document 监听 PointerEvent (完美兼容电脑鼠标拖拽、手机触摸、手写笔)
   nativeAddEventListener('pointerdown', function (e) {
     if (e.button !== undefined && e.button !== 0) return;
     // 如果点击的是开发者调试工具浮层,不透传给游戏画布
     if (e.target && e.target.closest && e.target.closest('#gm-toolbar')) return;
+    if (e.cancelable) e.preventDefault();
+    flushPendingTouchMove();
     var t = toTouchItem(e);
     activeTouches.set(t.identifier, t);
     dispatchTouch('onTouchStart', getActiveTouchesList(), [t]);
@@ -223,14 +249,28 @@
   nativeAddEventListener('pointermove', function (e) {
     var id = e.pointerId !== undefined ? e.pointerId : 0;
     if (!activeTouches.has(id)) return;
+    if (e.cancelable) e.preventDefault();
     var t = toTouchItem(e);
     activeTouches.set(id, t);
-    dispatchTouch('onTouchMove', getActiveTouchesList(), [t]);
+    pendingMoveTouches = getActiveTouchesList();
+    pendingChangedTouches = [t];
+    if (!moveRafId) {
+      moveRafId = requestAnimationFrame(function () {
+        moveRafId = null;
+        if (pendingMoveTouches && pendingChangedTouches) {
+          dispatchTouch('onTouchMove', pendingMoveTouches, pendingChangedTouches);
+          pendingMoveTouches = null;
+          pendingChangedTouches = null;
+        }
+      });
+    }
   }, { capture: true, passive: false });
 
   function handlePointerEnd(e, isCancel) {
     var id = e.pointerId !== undefined ? e.pointerId : 0;
     if (!activeTouches.has(id)) return;
+    if (e.cancelable) e.preventDefault();
+    flushPendingTouchMove();
     var t = toTouchItem(e);
     activeTouches.delete(id);
     dispatchTouch(isCancel ? 'onTouchCancel' : 'onTouchEnd', getActiveTouchesList(), [t]);
@@ -240,6 +280,7 @@
   nativeAddEventListener('pointercancel', function (e) { handlePointerEnd(e, true); }, { capture: true, passive: false });
 
   global.addEventListener('blur', function () {
+    flushPendingTouchMove();
     if (activeTouches.size > 0) {
       var remaining = getActiveTouchesList();
       activeTouches.clear();

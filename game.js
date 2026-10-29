@@ -703,14 +703,14 @@ var _typeof2 = require("@babel/runtime/helpers/typeof");
             if (!t._paused) {
               t._intervalId = window.requestAnimFrame(_e);
               var fps = n.frameRate || 60;
-              if (fps < 120) {
-                var targetInterval = 1000 / fps;
+              if (fps <= 60) {
                 var now = timestamp || (typeof performance !== 'undefined' ? performance.now() : Date.now());
                 var delta = now - lastFrameTime;
-                if (delta < targetInterval - 1.5) {
-                  return; // 节流：跳过120Hz高刷屏幕多余的帧，降低CPU/GPU负荷50%以上
+                // 仅针对 >83Hz(如 120Hz ProMotion 屏幕)进行跳帧,绝对不误伤 60Hz 屏幕(如 iPhone 16 A18)的正常帧,彻底消除拖拽卡顿
+                if (delta < 12.0) {
+                  return;
                 }
-                lastFrameTime = now - (delta % targetInterval);
+                lastFrameTime = now;
               }
               r.mainLoop();
             }

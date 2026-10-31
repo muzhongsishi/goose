@@ -1314,18 +1314,21 @@
   function applyCookPut(role, params) {
     var board = getBoardFor(role, params && params.boardId);
     var cell = board && board.cells && board.cells.get(Number(params.index));
-    if (!cell || !params.ingredientId) return;
+    if (!cell || !params.ingredientId) return cell || null;
     var order = ensureCellOrder(cell);
     var eid = Number(params.ingredientId);
     order.elements.set(eid, (order.elements.get(eid) || 0) + 1);
     if (!Array.isArray(cell.hiddenPocket)) cell.hiddenPocket = [];
     cell.hiddenPocket.push({ elementId: eid });
+    console.log('[mock-cook] 投料成功 idx=' + params.index + ' ingredientId=' + eid);
+    scheduleSave();
+    return cell;
   }
   // 取料:elements-1 / hiddenPocket 删一枚(客户端本地已把元素放回棋盘 toIndex)
   function applyCookTake(role, params) {
     var board = getBoardFor(role, params && params.boardId);
     var cell = board && board.cells && board.cells.get(Number(params.index));
-    if (!cell || !params.eleId) return;
+    if (!cell || !params.eleId) return cell || null;
     var order = ensureCellOrder(cell);
     var eid = Number(params.eleId);
     var n = order.elements.get(eid) || 0;
@@ -1335,6 +1338,9 @@
         if (cell.hiddenPocket[i] && cell.hiddenPocket[i].elementId === eid) { cell.hiddenPocket.splice(i, 1); break; }
       }
     }
+    console.log('[mock-cook] 取料成功 idx=' + params.index + ' eleId=' + eid);
+    scheduleSave();
+    return cell;
   }
   // 停止烹饪:扣 Config.cookStopCost 钻石,清订单(食材不退,与原版停止确认窗语义一致)
   function applyCookCancel(role, params) {
@@ -1350,11 +1356,12 @@
     }
     console.log('[mock-cook] 停止烹饪 idx=' + (params && params.index) + ' 扣钻' + (cost && cost.Diamond || 0));
     scheduleSave();
+    return cell;
   }
   // 收菜(单个/批量):请求 cells=客户端权威产出;服务器确认=清灶具订单+产出落活体棋盘
   function applyCookCollect(role, params) {
     var board = getBoardFor(role, params && params.boardId);
-    if (!board) return;
+    if (!board) return [];
     var idx = Number(params.index);
     var cell = board.cells && board.cells.get(idx);
     if (cell) {
@@ -1363,6 +1370,8 @@
       order.elements = new Map();
       cell.hiddenPocket = [];
     }
+    var resCells = [];
+    if (cell) resCells.push(cell);
     var produced = params.cells;
     if (Array.isArray(produced)) {
       for (var i = 0; i < produced.length; i++) {
@@ -1370,19 +1379,22 @@
         if (!pc || pc.elementId === undefined || pc.index === undefined) continue;
         if (!board.cells.has(pc.index) || !board.cells.get(pc.index).elementId) {
           // 空格落子(与 ns/rs 形状对齐的最小 cell)
-          board.cells.set(pc.index, {
+          var newCell = {
             uUID: pc.index + 1, seed: 0, index: pc.index, elementId: pc.elementId,
             state: 0, productType: pc.productType || 0, bubbleEnd: 0, deteriorateEnd: 0,
             openEnd: 0, pauseTime: 0, endTime: 0, processTime: 0, skills: new Map(),
             order: { id: 0, orderId: 0, demand: new Map(), elements: new Map(), unlock: [], rewards: new Map(), rewarded: false, state: 0, endTime: 0, pauseTime: 0 },
             orderBegin: [], hp: new Map(), recovery: new Map(), productCount: 0,
             autoProductCount: 0, extra: new Map(), hiddenPocket: [], cost: pc.cost || 0
-          });
+          };
+          board.cells.set(pc.index, newCell);
+          resCells.push(newCell);
         }
       }
     }
     console.log('[mock-cook] 收菜 idx=' + idx + ' 产出x' + (Array.isArray(produced) ? produced.length : 0));
     scheduleSave();
+    return resCells;
   }
 
   // ===== 阶段二：常规背包与发射器仓库业务支持 =====
@@ -1429,11 +1441,33 @@
     return { ok: true, newSize: nextId };
   }
 
+  // 全局维护被删除/取出的背包项缓存，防止客户端先行 delete 导致数据蒸发
+  var recentDeletedBagItems = new Map();
+  function hookBagMap(bag) {
+    if (!bag || !bag.items || bag.items.__deleteHooked) return;
+    var itemsMap = bag.items;
+    itemsMap.__deleteHooked = true;
+    var rawDelete = itemsMap.delete.bind(itemsMap);
+    itemsMap.delete = function (k) {
+      var val = itemsMap.get(k);
+      if (val) {
+        recentDeletedBagItems.set(Number(k), val);
+        if (recentDeletedBagItems.size > 50) {
+          var firstKey = recentDeletedBagItems.keys().next().value;
+          recentDeletedBagItems.delete(firstKey);
+        }
+      }
+      return rawDelete(k);
+    };
+  }
+
   function applyCellToBag(role, params) {
     syncRuntimeBoardsToRole(role);
     var b = getBoardFor(role);
     if (!b || !b.bag) return { ok: false, error: '背包未就绪' };
     if (!(b.bag.items instanceof Map)) b.bag.items = new Map();
+    hookBagMap(b.bag);
+    if (window.o3 && window.o3.Data && window.o3.Data.bag) hookBagMap(window.o3.Data.bag);
     var capacity = (Number(b.bag.size) || 8) + (Number(b.bag.extSize) || 0);
 
     var idx = Number(params && params.index);
@@ -1481,25 +1515,39 @@
     var b = getBoardFor(role);
     if (!b || !b.bag) return { ok: false, error: '背包未就绪' };
     if (!(b.bag.items instanceof Map)) b.bag.items = new Map();
+    hookBagMap(b.bag);
+    if (window.o3 && window.o3.Data && window.o3.Data.bag) hookBagMap(window.o3.Data.bag);
     var bagId = Number(params && params.bagId);
     var toIndex = Number(params && params.toIndex);
 
     var cell = null;
+    // 优先 1：直接在背包里命中
     if (b.bag.items.has(bagId)) {
       cell = b.bag.items.get(bagId);
       b.bag.items.delete(bagId);
-    } else {
-      // 客户端在发出 RPC 前已在本地执行了 o3.Data.bag.items.delete 并将元素恢复至棋盘格！
-      // 严禁从背包盲目使用 entries().next() 抓取首个无关物品，必须直接获取目标格子的活体对象！
+    }
+    // 优先 2：从刚刚被客户端先行 delete 的缓存中取回（精准匹配 bagId，彻底杜绝取出后消失！）
+    else if (recentDeletedBagItems.has(bagId)) {
+      cell = recentDeletedBagItems.get(bagId);
+      recentDeletedBagItems.delete(bagId);
+      console.log('[mock-bag] 从先行删除缓存中找回目标项: bagId=' + bagId + ' elem=' + (cell && cell.elementId));
+    }
+    // 优先 3：从棋盘活体或者目标格寻找已放置的元素
+    else {
       var existing = b.cells && b.cells.get(toIndex);
       if (existing && existing.elementId > 0) {
         cell = existing;
+      } else if (window.o3 && window.o3.BoardCells && window.o3.BoardCells.get(toIndex)) {
+        var obCell = window.o3.BoardCells.get(toIndex);
+        if (obCell && obCell.elementId > 0) {
+          cell = obCell;
+        }
       }
     }
 
     if (!cell) {
       console.warn('[mock-bag] 取回目标项不存在且棋盘未就绪: bagId=' + bagId + ' toIndex=' + toIndex);
-      return { ok: true, cell: null };
+      return { ok: false, error: '未找到背包物品', cell: null };
     }
 
     cell.index = toIndex;
@@ -3250,16 +3298,36 @@
         }).then(function (r) { scheduleSave(); return r; });
       }
       if (currentRole && gcmd === 'game_cookputingredients') {
-        applyCookPut(currentRole, t.params);
+        var cpCell = applyCookPut(currentRole, t.params);
+        return Promise.resolve({
+          code: 0,
+          getData: function () { return { cells: cpCell ? [cpCell] : [], role: currentRole }; },
+          rawData: { code: 0 }
+        }).then(function (r) { scheduleSave(); return r; });
       }
       if (currentRole && gcmd === 'game_cooktakeingredient') {
-        applyCookTake(currentRole, t.params);
+        var ctCell = applyCookTake(currentRole, t.params);
+        return Promise.resolve({
+          code: 0,
+          getData: function () { return { cells: ctCell ? [ctCell] : [], role: currentRole }; },
+          rawData: { code: 0 }
+        }).then(function (r) { scheduleSave(); return r; });
       }
       if (currentRole && gcmd === 'game_cookcancel') {
-        applyCookCancel(currentRole, t.params);
+        var ccCell = applyCookCancel(currentRole, t.params);
+        return Promise.resolve({
+          code: 0,
+          getData: function () { return { cells: ccCell ? [ccCell] : [], role: currentRole }; },
+          rawData: { code: 0 }
+        }).then(function (r) { scheduleSave(); return r; });
       }
       if (currentRole && (gcmd === 'game_cookcollect' || gcmd === 'game_cookcollectbatch')) {
-        applyCookCollect(currentRole, t.params);
+        var clCells = applyCookCollect(currentRole, t.params);
+        return Promise.resolve({
+          code: 0,
+          getData: function () { return { cells: clCells || [], role: currentRole }; },
+          rawData: { code: 0 }
+        }).then(function (r) { scheduleSave(); return r; });
       }
       // ===== 商店系统 RPC =====
       if (currentRole && gcmd === 'game_shopbuy') {

@@ -1,6 +1,22 @@
 // 微信小游戏 wx API 的浏览器 polyfill
 // 让 Cocos 微信小游戏构建能在浏览器里跑起来
 (function (global) {
+  var _cc = global.cc;
+  Object.defineProperty(global, 'cc', {
+    configurable: true,
+    enumerable: true,
+    get: function() { return _cc; },
+    set: function(v) {
+      _cc = v;
+      if (_cc && _cc.Node && !_cc.Node.prototype.getComponentInParent) {
+        _cc.Node.prototype.getComponentInParent = function(type) {
+          for (var comp, curr = this; !(comp = curr.getComponent(type)) && (curr = curr.parent) && !(curr instanceof _cc.Scene););
+          return comp;
+        };
+      }
+    }
+  });
+
   var wx = global.wx = {};
   // 保存原生 document 引用:adapter(game.js) 之后会替换 window.document 为模拟对象,
   // 这里必须始终用原生 DOM 创建真实的 canvas/img 元素,否则会递归/拿到模拟元素

@@ -181,11 +181,11 @@
         }
       } catch (e) {}
       var uid = localStorage.getItem('fe_player_uid');
-      if (!uid || !uid.trim()) {
+      if (!uid || !String(uid).trim()) {
         uid = '1001';
         localStorage.setItem('fe_player_uid', uid);
       }
-      return uid;
+      return String(uid).trim();
     }
     function updateUIDDisplay(uid) {
       var el = getDom('player-uid-display');

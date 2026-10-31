@@ -3122,6 +3122,20 @@
           elem.sellDoubleCheck = 1;
           patched++;
         }
+        // 确保发射器的充能配置完整：如果具备生产属性但缺少 CDCost，补齐合理的 CDCost
+        var isProducer = (elem.elementIdWeight && ((elem.elementIdWeight instanceof Map && elem.elementIdWeight.size > 0) || (typeof elem.elementIdWeight === 'object' && Object.keys(elem.elementIdWeight).length > 0))) ||
+                         (elem.elementIdList && elem.elementIdList.length > 0) ||
+                         (elem.elementCDStorage > 0);
+        if (isProducer) {
+          if (!elem.elementCDCost || elem.elementCDCost <= 0) {
+            var plvl = Math.max(1, Number(elem.level) || 1);
+            elem.elementCDCost = Math.max(4, plvl * 2);
+          }
+          if (!elem.elementCDStorage || elem.elementCDStorage <= 0) {
+            elem.elementCDStorage = 10;
+          }
+          elem.canRecharge = 1;
+        }
       });
       if (patched > 0) {
         console.log('[mock-element] 运行时成功注入 ' + patched + ' 个发射器/道具的出售价格(sellPrice+sellDoubleCheck)');
@@ -6502,11 +6516,13 @@
         });
       }
 
-      // 针对 ElementInfo 与 ElementDetailWindow 原型注入
+      // 针对 ElementInfo 与 ElementDetailWindow 原型注入与发射器 CD 充能/出售共存调度
       try {
         var elInfoCls = cc.js && cc.js.getClassByName && cc.js.getClassByName('ElementInfo');
         if (elInfoCls && elInfoCls.prototype && !elInfoCls.prototype.__boostHooked) {
           elInfoCls.prototype.__boostHooked = true;
+
+          // 1. showElementInfo 增强
           var origShowInfo = elInfoCls.prototype.showElementInfo;
           elInfoCls.prototype.showElementInfo = function (e, t) {
             var res = origShowInfo.apply(this, arguments);
@@ -6520,6 +6536,132 @@
                 this.label_desc.lineHeight = 34;
                 this.label_desc.overflow = cc.Label.Overflow.RESIZE_HEIGHT;
                 this.label_desc.enableWrapText = true;
+              }
+              // CD 期间确保充能按钮处于最高可见性
+              var targetCell = e || this.cell;
+              if (targetCell && targetCell.mergeCellData) {
+                var mcd = targetCell.mergeCellData;
+                var conf = mcd.config;
+                var rec = targetCell.board ? targetCell.board.getCellRecovery(targetCell.serverIdx, 1) : null;
+                if (!rec && mcd.getRecovery) rec = mcd.getRecovery(1);
+                var isCd = rec && (rec.value === 0 || rec.state === 1);
+                if (isCd && conf && conf.elementCDStorage > 0) {
+                  if (this.btn_gem) this.btn_gem.active = true;
+                  if (this.layout_btn) {
+                    this.layout_btn.updateLayout();
+                    this.adaptInfoWidth();
+                  }
+                }
+              }
+            } catch (err) {}
+            return res;
+          };
+
+          // 2. checkNeedShowCreator 兜底保障：冷却中发射器绝不隐藏充能按钮
+          var origCheckNeedShow = elInfoCls.prototype.checkNeedShowCreator;
+          elInfoCls.prototype.checkNeedShowCreator = function (cell) {
+            var ok = origCheckNeedShow ? origCheckNeedShow.apply(this, arguments) : false;
+            if (!ok && cell && cell.mergeCellData) {
+              var mcd = cell.mergeCellData;
+              var conf = mcd.config;
+              var rec = cell.board ? cell.board.getCellRecovery(cell.serverIdx, 1) : null;
+              if (!rec && mcd.getRecovery) rec = mcd.getRecovery(1);
+              if (conf && conf.elementCDStorage > 0 && rec && (rec.value === 0 || rec.state === 1)) {
+                return true;
+              }
+            }
+            return ok;
+          };
+
+          // 3. showElementInfoCreator 兜底保证钻石充能价格与标签显示
+          var origShowCreator = elInfoCls.prototype.showElementInfoCreator;
+          elInfoCls.prototype.showElementInfoCreator = function (cell) {
+            var res = origShowCreator ? origShowCreator.apply(this, arguments) : undefined;
+            try {
+              if (cell && cell.mergeCellData) {
+                var mcd = cell.mergeCellData;
+                var conf = mcd.config;
+                var rec = cell.board ? cell.board.getCellRecovery(cell.serverIdx, 1) : null;
+                if (!rec && mcd.getRecovery) rec = mcd.getRecovery(1);
+                var isCd = rec && (rec.state === 1 || rec.value === 0);
+                if (isCd && this.btn_gem) {
+                  this.btn_gem.active = true;
+                  var dyn = cell.dynamicComponents ? cell.dynamicComponents.get("ManuCreatorRecover") : null;
+                  var cost = (dyn && dyn.costGem > 0) ? dyn.costGem : (conf.elementCDCost > 0 ? conf.elementCDCost : 14);
+                  if (this.label_gemPrice) {
+                    this.label_gemPrice.node.active = true;
+                    if (!this.label_gemPrice.string || Number(this.label_gemPrice.string) <= 0) {
+                      this.label_gemPrice.string = String(cost);
+                    }
+                  }
+                  if (this.label_speedup) {
+                    this.label_speedup.node.active = true;
+                    if (this.label_speedup.node.parent) this.label_speedup.node.parent.active = true;
+                  }
+                  if (this.layout_btn) this.layout_btn.updateLayout();
+                }
+              }
+            } catch (err) {}
+            return res;
+          };
+        }
+
+        // 4. ElementInfo_SellButton 原型调度：CD 冷却期避让出售，确保快速充能按钮 100% 显现；非 CD 状态正常出售
+        var sellBtnCls = cc.js && cc.js.getClassByName && cc.js.getClassByName('ElementInfo_SellButton');
+        if (sellBtnCls && sellBtnCls.prototype && !sellBtnCls.prototype.__cdCoordHooked) {
+          sellBtnCls.prototype.__cdCoordHooked = true;
+          var origSellRender = sellBtnCls.prototype.renderView;
+          sellBtnCls.prototype.renderView = function (cell) {
+            var isCreatorInCd = false;
+            try {
+              if (cell && cell.mergeCellData) {
+                var mcd = cell.mergeCellData;
+                var conf = mcd.config;
+                var rec = cell.board ? cell.board.getCellRecovery(cell.serverIdx, 1) : null;
+                if (!rec && mcd.getRecovery) rec = mcd.getRecovery(1);
+                var dyn = cell.dynamicComponents ? cell.dynamicComponents.get("ManuCreatorRecover") : null;
+                var leftTime = dyn ? dyn.createLeftTime : 0;
+                if (conf && conf.elementCDStorage > 0 && rec) {
+                  if (rec.state === 1 || rec.value === 0 || leftTime > 0) {
+                    isCreatorInCd = true;
+                  }
+                }
+                // 厨具如果在烹饪中也避让出售
+                if (cell.isCookWare && mcd.remoteData && mcd.remoteData.order && mcd.remoteData.order.state === 2) {
+                  isCreatorInCd = true;
+                }
+              }
+            } catch (e) {}
+
+            if (isCreatorInCd) {
+              this.hideAll();
+              return;
+            }
+            return origSellRender.apply(this, arguments);
+          };
+        }
+
+        // 5. ManuCreatorElement 棋盘点击增强：冷却中点击发射器自动选中并刷新底栏钻石充能
+        var manuCls = cc.js && cc.js.getClassByName && cc.js.getClassByName('ManuCreatorElement');
+        if (manuCls && manuCls.prototype && !manuCls.prototype.__quickCdClickHooked) {
+          manuCls.prototype.__quickCdClickHooked = true;
+          var origClickElem = manuCls.prototype.onClickElement;
+          manuCls.prototype.onClickElement = function (cell, t, i) {
+            var res = origClickElem.apply(this, arguments);
+            try {
+              if (cell && cell.mergeCellData) {
+                var mcd = cell.mergeCellData;
+                var conf = mcd.config;
+                var rec = cell.board ? cell.board.getCellRecovery(cell.serverIdx, 1) : null;
+                if (!rec && mcd.getRecovery) rec = mcd.getRecovery(1);
+                if (rec && (rec.value <= 0 || rec.state === 1) && (!conf.elementOrderId || conf.elementOrderId === 0)) {
+                  if (window.o3 && window.o3.instance) {
+                    window.o3.instance.selectedElement = cell;
+                  }
+                  if (window.nu && window.nu.dispatch) {
+                    window.nu.dispatch('showElementInfo', cell);
+                  }
+                }
               }
             } catch (err) {}
             return res;

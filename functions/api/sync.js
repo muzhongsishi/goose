@@ -63,6 +63,38 @@ export async function onRequestGet(context) {
       updatedAt = Number(globalThis.__memoryUsers[uid].updatedAt || 0);
     }
 
+    // 自动容灾继承：如果当前用户角色数据不存在，或者格子数 < 10（损坏档）
+    let isRoleCellsValid = false;
+    if (roleData) {
+      try {
+        const pr = typeof roleData === 'string' ? JSON.parse(roleData) : roleData;
+        if (pr && pr.boards && pr.boards.__m) {
+          const b1 = pr.boards.__m.find(b => b[0] === 1);
+          if (b1 && b1[1] && b1[1].cells && b1[1].cells.__m && b1[1].cells.__m.length >= 10) {
+            isRoleCellsValid = true;
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (!isRoleCellsValid) {
+      // 尝试从权威主档 role_杰杰 继承完整的 63 格 42 抽屉存档！
+      let masterData = null;
+      if (kv) {
+        masterData = await kv.get('role_杰杰');
+      } else {
+        masterData = memoryStore.roles['杰杰'];
+      }
+      if (masterData) {
+        console.log(`[sync] UID=${uid} 棋盘损坏或无数据，自动从权威主档[杰杰]秒级恢复！`);
+        roleData = masterData;
+        if (kv) {
+          // 顺手把修复好的数据写回 role_${uid}
+          await kv.put(`role_${uid}`, masterData);
+        }
+      }
+    }
+
     // 合并全局内存邮件缓存（跨 API 兜底）
     if (globalThis.__memoryMails) {
       if (Array.isArray(globalThis.__memoryMails[uid])) {
@@ -213,6 +245,17 @@ export async function onRequestPost(context) {
       if (exUser) existingDay = Number(JSON.parse(exUser).day || 0);
     } catch (e) {}
   }
+  // 严格拦截棋盘损坏/丢失的坏档上传
+  try {
+    const pr = typeof roleData === 'string' ? JSON.parse(roleData) : roleData;
+    if (pr && pr.boards && pr.boards.__m) {
+      const b1 = pr.boards.__m.find(b => b[0] === 1);
+      if (b1 && b1[1] && b1[1].cells && b1[1].cells.__m && b1[1].cells.__m.length < 10) {
+        console.warn(`[sync] 拒绝棋盘损坏/丢失的存档上传: uid=${uid}, cellsCount=${b1[1].cells.__m.length}`);
+        return jsonResp({ ok: true, uid, rejected: true, message: '拦截损坏棋盘上传' });
+      }
+    }
+  } catch (e) {}
   if (!body.force && existingDay > 5 && dayVal < existingDay) {
     console.warn(`[sync] 拒绝低进度覆盖高进度: uid=${uid}, incomingDay=${dayVal}, existingDay=${existingDay}`);
     return jsonResp({ ok: true, uid, rejected: true, message: `已保护云端高进度 (云端第${existingDay}抽屉 vs 上传第${dayVal}抽屉)` });

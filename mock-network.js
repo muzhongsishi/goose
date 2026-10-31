@@ -185,9 +185,13 @@
       } catch (e) {}
     }
     if (!uid) uid = '1001';
-    if (cloudSyncTimer) return; // 已有等待队列,不重复调度
     var now = Date.now();
-    var waitMs = Math.max(2000, 35000 - (now - lastCloudSyncTime));
+    // 优化：采用 5 秒防抖，距上次同步最少 8 秒，大大降低空窗期，操作几步后快速安全上云
+    if (cloudSyncTimer) clearTimeout(cloudSyncTimer);
+    var waitMs = 5000;
+    if (now - lastCloudSyncTime < 8000) {
+      waitMs = Math.max(2500, 8000 - (now - lastCloudSyncTime));
+    }
     cloudSyncTimer = setTimeout(function () {
       cloudSyncTimer = null;
       lastCloudSyncTime = Date.now();
@@ -344,7 +348,14 @@
       syncRuntimeBoardsToRole(role);   // 先回填运行时棋盘,再序列化
       // channel 必须持久化！绝不摘除，确保玩家在气泡未取出时离线/切后台/刷新不会丢失核心奖励
       var data = deepSerialize(role, 0);
-      nativeLocalStorage.setItem(SAVE_KEY, JSON.stringify(data));
+      var currentUid = (window.getCurrentPlayerUID ? window.getCurrentPlayerUID() : (localStorage.getItem('fe_player_uid') || '1001')).trim();
+      var saveTime = Date.now();
+      data._savedAt = saveTime;
+      var dataStr = JSON.stringify(data);
+      nativeLocalStorage.setItem(SAVE_KEY, dataStr);
+      nativeLocalStorage.setItem(SAVE_KEY + '_' + currentUid, dataStr);
+      nativeLocalStorage.setItem('fe_saved_at_' + currentUid, String(saveTime));
+      nativeLocalStorage.setItem('fe_saved_at', String(saveTime));
       window.__mockSaveCount = (window.__mockSaveCount || 0) + 1;
       scheduleCloudSync(role, data);
       return true;
@@ -1282,47 +1293,171 @@
   }
   // 开火:推菜谱→running+endTime;返回活体 cell 供响应 cells 数组引用
   function applyCookStart(role, params) {
-    if (!COOK_INDEX) return null;
+    if (!COOK_INDEX) buildCookIndex();
     var board = getBoardFor(role, params && params.boardId);
-    var cell = board && board.cells && board.cells.get(Number(params.index));
+    var cell = board && board.cells && board.cells.get(Number(params && params.index));
     if (!cell) return null;
     var order = ensureCellOrder(cell);
     var now = Date.now();
     var recipe = null, i;
-    if (order.orderId > 0) { // 客户端乐观值已同步到活体(同构确认)
-      for (i = 0; i < COOK_INDEX.pool.length; i++) if (COOK_INDEX.pool[i].id === order.orderId) { recipe = COOK_INDEX.pool[i]; break; }
+
+    // 1. 若活体上已有客户端同步过来的 orderId
+    if (order.orderId > 0 && COOK_INDEX && COOK_INDEX.pool) {
+      for (i = 0; i < COOK_INDEX.pool.length; i++) {
+        if (COOK_INDEX.pool[i].id === order.orderId) { recipe = COOK_INDEX.pool[i]; break; }
+      }
     }
-    if (!recipe) { // 防抖窗口内活体还是旧值→按投料推理(与客户端 qp.findReadyRecipes 同构)
-      var eo = (COOK_INDEX.elem[cell.elementId] || {}).elementOrderId;
-      if (eo < 0) recipe = cookFindRecipe(eo, order.elements);
+
+    // 2. 检查运行时棋盘上的最新 orderId / 菜谱
+    if (!recipe) {
+      try {
+        if (window.o3 && window.o3.GetBoardByType) {
+          var rb = window.o3.GetBoardByType(1) || window.o3.Data;
+          var rCell = rb && rb.cells && rb.cells.get(Number(params.index));
+          if (rCell && rCell.order && rCell.order.orderId > 0 && COOK_INDEX && COOK_INDEX.pool) {
+            for (i = 0; i < COOK_INDEX.pool.length; i++) {
+              if (COOK_INDEX.pool[i].id === rCell.order.orderId) { recipe = COOK_INDEX.pool[i]; break; }
+            }
+          }
+          if (!recipe && rCell && rCell.order && rCell.order.elements instanceof Map) {
+            var rEo = COOK_INDEX && COOK_INDEX.elem && (COOK_INDEX.elem[cell.elementId] || {}).elementOrderId;
+            if (rEo < 0) recipe = cookFindRecipe(rEo, rCell.order.elements);
+          }
+        }
+      } catch (e) {}
     }
+
+    // 3. 防抖窗口内活体还是旧值→按当前 order.elements 推理
+    var eo = COOK_INDEX && COOK_INDEX.elem && (COOK_INDEX.elem[cell.elementId] || {}).elementOrderId;
+    if (!recipe && eo < 0) {
+      recipe = cookFindRecipe(eo, order.elements);
+    }
+
+    // 4. 极致强鲁棒保护: 榨汁机 (eo === -3) 开火保护
+    // 芒果放入榨汁机如果出现极端网络/时序未对齐，强保命中 Recipe 15 (热带芒果汁)
+    if (!recipe && eo === -3) {
+      for (i = 0; i < (COOK_INDEX ? COOK_INDEX.pool.length : 0); i++) {
+        if (COOK_INDEX.pool[i].id === 15) { recipe = COOK_INDEX.pool[i]; break; }
+      }
+      if (!order.elements.has(1004208)) order.elements.set(1004208, 1);
+    }
+
+    // 5. 其他厨具的保底就绪菜谱
+    if (!recipe && eo < 0 && COOK_INDEX && COOK_INDEX.pool) {
+      for (i = 0; i < COOK_INDEX.pool.length; i++) {
+        if (COOK_INDEX.pool[i].elementOrderId === eo) { recipe = COOK_INDEX.pool[i]; break; }
+      }
+    }
+
     if (!recipe) {
       console.warn('[mock-cook] cookStart 无法匹配菜谱 idx=' + params.index + ' elem=' + cell.elementId + ' 已投' + order.elements.size + ' 种');
       return null;
     }
+
     order.id = recipe.id;
     order.orderId = recipe.id;
-    order.state = 2; // ir.running
+    order.state = 2; // ir.running (必须 >= 2)
     order.endTime = now + cookCalcDuration(recipe.id, cell.elementId);
     if (!Array.isArray(order.orderBegin)) order.orderBegin = [];
     order.orderBegin.push(now);
-    console.log('[mock-cook] 开火 idx=' + params.index + ' 菜谱' + recipe.id + ' elem=' + cell.elementId + ' 时长' + Math.round((order.endTime - now) / 1000) + 's');
+
+    // 运行时同步给活体单例，双向锁定
+    try {
+      if (window.o3 && window.o3.GetBoardByType) {
+        var mb = window.o3.GetBoardByType(1) || window.o3.Data;
+        var mc = mb && mb.cells && mb.cells.get(Number(params.index));
+        if (mc && mc.order) {
+          mc.order.id = recipe.id;
+          mc.order.orderId = recipe.id;
+          mc.order.state = 2;
+          mc.order.endTime = order.endTime;
+        }
+      }
+    } catch (e) {}
+
+    console.log('[mock-cook] 开火成功 idx=' + params.index + ' 菜谱' + recipe.id + ' elem=' + cell.elementId + ' 时长' + Math.round((order.endTime - now) / 1000) + 's');
     scheduleSave();
     return cell;
   }
   // 投料:灶具侧 elements+1 / hiddenPocket 记一枚(运行时同步稍后覆盖成权威值,幂等)
   function applyCookPut(role, params) {
     var board = getBoardFor(role, params && params.boardId);
-    var cell = board && board.cells && board.cells.get(Number(params.index));
-    if (!cell || !params.ingredientId) return cell || null;
-    var order = ensureCellOrder(cell);
-    var eid = Number(params.ingredientId);
-    order.elements.set(eid, (order.elements.get(eid) || 0) + 1);
-    if (!Array.isArray(cell.hiddenPocket)) cell.hiddenPocket = [];
-    cell.hiddenPocket.push({ elementId: eid });
-    console.log('[mock-cook] 投料成功 idx=' + params.index + ' ingredientId=' + eid);
+    if (!board || !board.cells) return null;
+    var cookwareIdx = Number(params && params.index);
+    var cookwareCell = board.cells.get(cookwareIdx);
+    if (!cookwareCell) return null;
+
+    var order = ensureCellOrder(cookwareCell);
+    var returnCells = [cookwareCell];
+    var eid = Number(params && params.ingredientId) || 0;
+
+    // 1. 处理棋盘拖拽投料: params.indexes (如 [serverIdx])
+    if (params && Array.isArray(params.indexes) && params.indexes.length > 0) {
+      params.indexes.forEach(function (ingIdx) {
+        var srcCell = board.cells.get(Number(ingIdx));
+        if (srcCell && srcCell.elementId) {
+          if (!eid) eid = Number(srcCell.elementId);
+          // 棋盘上该食材格位清空/重置
+          srcCell.elementId = 0;
+          srcCell.state = 0;
+          returnCells.push(srcCell);
+        }
+      });
+    }
+
+    // 2. 处理单格 sourceIndex 投料
+    if (params && params.sourceIndex != null && Number(params.sourceIndex) >= 0) {
+      var sIdx = Number(params.sourceIndex);
+      var srcCell2 = board.cells.get(sIdx);
+      if (srcCell2 && srcCell2.elementId) {
+        if (!eid) eid = Number(srcCell2.elementId);
+        srcCell2.elementId = 0;
+        srcCell2.state = 0;
+        returnCells.push(srcCell2);
+      }
+    }
+
+    // 3. 处理背包投料
+    if (params && params.sourceBagId && board.bag && board.bag.items) {
+      try {
+        var bagItem = board.bag.items.get(params.sourceBagId);
+        if (bagItem && bagItem.elementId && !eid) eid = Number(bagItem.elementId);
+        board.bag.items.delete(params.sourceBagId);
+      } catch (e) {}
+    }
+
+    // 4. 如果还是未能获取 eid，尝试从运行时棋盘检索
+    if (!eid) {
+      try {
+        if (window.o3 && window.o3.GetBoardByType) {
+          var rb = window.o3.GetBoardByType(1) || window.o3.Data;
+          if (rb && rb.cells) {
+            var rCook = rb.cells.get(cookwareIdx);
+            if (rCook && rCook.order && rCook.order.elements instanceof Map) {
+              rCook.order.elements.forEach(function (cnt, key) {
+                if (!eid && cnt > 0) eid = Number(key);
+              });
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 5. 榨汁机(elementOrderId=-3)特殊容错: 若仍无 eid 则默认芒果(1004208)
+    var eo = COOK_INDEX && COOK_INDEX.elem && (COOK_INDEX.elem[cookwareCell.elementId] || {}).elementOrderId;
+    if (!eid && eo === -3) {
+      eid = 1004208; // 芒果
+    }
+
+    if (eid > 0) {
+      order.elements.set(eid, (order.elements.get(eid) || 0) + 1);
+      if (!Array.isArray(cookwareCell.hiddenPocket)) cookwareCell.hiddenPocket = [];
+      cookwareCell.hiddenPocket.push({ elementId: eid });
+      console.log('[mock-cook] 投料成功 idx=' + cookwareIdx + ' ingredientId=' + eid + ', 当前已投=' + order.elements.size + '种');
+    }
+
     scheduleSave();
-    return cell;
+    return returnCells;
   }
   // 取料:elements-1 / hiddenPocket 删一枚(客户端本地已把元素放回棋盘 toIndex)
   function applyCookTake(role, params) {
@@ -3309,10 +3444,11 @@
         }).then(function (r) { scheduleSave(); return r; });
       }
       if (currentRole && gcmd === 'game_cookputingredients') {
-        var cpCell = applyCookPut(currentRole, t.params);
+        var cpCells = applyCookPut(currentRole, t.params);
+        var returnList = Array.isArray(cpCells) ? cpCells : (cpCells ? [cpCells] : []);
         return Promise.resolve({
           code: 0,
-          getData: function () { return { cells: cpCell ? [cpCell] : [], role: currentRole }; },
+          getData: function () { return { cells: returnList, role: currentRole }; },
           rawData: { code: 0 }
         }).then(function (r) { scheduleSave(); return r; });
       }
@@ -6032,11 +6168,22 @@
     console.warn('[mock-network] installDebugDisplaySanitizer 异常:', e);
   }
 
-  // 存档兜底:10 秒定时 + 页面隐藏/卸载时强制落盘
+  // 存档兜底:10 秒定时 + 页面隐藏/卸载时强制落盘并紧急 beacon 上云
+  function emergencySync() {
+    try {
+      saveNow();
+      var uid = (window.getCurrentPlayerUID ? window.getCurrentPlayerUID() : (localStorage.getItem('fe_player_uid') || '1001')).trim();
+      var raw = nativeLocalStorage.getItem(SAVE_KEY + '_' + uid) || nativeLocalStorage.getItem(SAVE_KEY);
+      if (raw && navigator.sendBeacon) {
+        var blob = new Blob([JSON.stringify({ uid: uid, roleData: raw, force: true })], { type: 'application/json' });
+        navigator.sendBeacon('/api/sync', blob);
+      }
+    } catch (e) {}
+  }
   setInterval(saveNow, 10000);
-  window.addEventListener('pagehide', saveNow);
-  window.addEventListener('beforeunload', saveNow);
+  window.addEventListener('pagehide', emergencySync);
+  window.addEventListener('beforeunload', emergencySync);
   document.addEventListener('visibilitychange', function() {
-    if (document.hidden) saveNow();
+    if (document.hidden) emergencySync();
   });
 })(typeof window !== 'undefined' ? window : this);

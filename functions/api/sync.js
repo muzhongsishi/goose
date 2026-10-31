@@ -36,10 +36,15 @@ export async function onRequestGet(context) {
   const kv = context.env && context.env.GAME_KV;
   let roleData = null;
   let newMails = [];
+  let updatedAt = 0;
 
   try {
     if (kv) {
       roleData = await kv.get(`role_${uid}`);
+      const rawUser = await kv.get(`user_${uid}`);
+      if (rawUser) {
+        try { updatedAt = Number(JSON.parse(rawUser).updatedAt || 0); } catch(e) {}
+      }
       const rawUserMails = await kv.get(`mails_${uid}`);
       const rawGlobalMails = await kv.get(`mails_global`);
       const userMails = rawUserMails ? JSON.parse(rawUserMails) : [];
@@ -47,8 +52,15 @@ export async function onRequestGet(context) {
       newMails = [...userMails, ...globalMails];
     } else {
       roleData = memoryStore.roles[uid] || null;
+      if (memoryStore.users && memoryStore.users[uid]) {
+        updatedAt = Number(memoryStore.users[uid].updatedAt || 0);
+      }
       const userMails = memoryStore.userMails[uid] || [];
       newMails = [...userMails, ...memoryStore.globalMails];
+    }
+
+    if (!updatedAt && globalThis.__memoryUsers && globalThis.__memoryUsers[uid]) {
+      updatedAt = Number(globalThis.__memoryUsers[uid].updatedAt || 0);
     }
 
     // 合并全局内存邮件缓存（跨 API 兜底）
@@ -134,6 +146,7 @@ export async function onRequestGet(context) {
     ok: true,
     uid,
     roleData,
+    updatedAt,
     newMails,
     serverTime: Math.floor(Date.now() / 1000)
   });

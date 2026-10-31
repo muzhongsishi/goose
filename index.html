@@ -545,26 +545,50 @@
                 var b1 = cloudParsed.boards.__m.find(function(b) { return b[0] === 1; });
                 if (b1 && b1[1] && b1[1].orderDrawerEndId) cloudDay = Number(b1[1].orderDrawerEndId);
               }
-              var localRaw = localStorage.getItem('fe_saved_role_v1');
+              var localRaw = localStorage.getItem('fe_saved_role_v1_' + currentUid) || localStorage.getItem('fe_saved_role_v1');
               var localDay = 0;
+              var localSavedAt = Number(localStorage.getItem('fe_saved_at_' + currentUid) || localStorage.getItem('fe_saved_at') || 0);
+              var cloudUpdatedAt = Number(data.updatedAt || (cloudParsed && cloudParsed._savedAt) || 0);
+
               if (localRaw) {
                 try {
                   var localParsed = JSON.parse(localRaw);
+                  if (!localSavedAt && localParsed && localParsed._savedAt) localSavedAt = Number(localParsed._savedAt);
                   if (localParsed.boards && localParsed.boards.__m) {
                     var lb1 = localParsed.boards.__m.find(function(b) { return b[0] === 1; });
                     if (lb1 && lb1[1] && lb1[1].orderDrawerEndId) localDay = Number(lb1[1].orderDrawerEndId);
                   }
                 } catch(e) {}
               }
-              var hasUrlUid = false;
-              try { hasUrlUid = !!new URLSearchParams(location.search).get('uid'); } catch(e) {}
-              if (hasUrlUid || !localRaw || cloudDay >= localDay) {
+
+              // 智能防回退判定策略 (以本地最新棋盘为第一优先):
+              // 1. 本地无任何存档时，拉取云端初始化
+              // 2. 云端抽屉天数显著更高时 (比如在其它设备推进了新关卡)，拉取云端
+              // 3. 同一天时：只有云端修改时间明确比本地修改时间新 5 秒以上，才拉取云端 (跨设备切换)
+              // 4. 其余情况 (本地刚操作未上云、或本地比云端更新)：绝对以本地最新棋盘为准，坚决不被云端旧快照覆盖！
+              var shouldOverwrite = false;
+              if (!localRaw) {
+                shouldOverwrite = true;
+              } else if (cloudDay > localDay) {
+                shouldOverwrite = true;
+              } else if (cloudDay === localDay) {
+                if (cloudUpdatedAt > (localSavedAt + 5000)) {
+                  shouldOverwrite = true;
+                }
+              }
+
+              if (shouldOverwrite) {
                 localStorage.setItem('fe_saved_role_v1', cloudRoleStr);
                 localStorage.setItem('fe_saved_role_v1_' + currentUid, cloudRoleStr);
+                localStorage.setItem('fe_saved_at_' + currentUid, String(cloudUpdatedAt || Date.now()));
+                localStorage.setItem('fe_saved_at', String(cloudUpdatedAt || Date.now()));
                 window.__cloudRoleDataPreloaded = data.roleData;
-                __log('[boot] 云端存档已注入本地 (云端进度: 第' + cloudDay + '抽屉, 本地原为: 第' + localDay + '抽屉)');
+                __log('[boot] 云端存档更新注入 (云端: 第' + cloudDay + '抽屉, 本地: 第' + localDay + '抽屉)');
               } else {
-                __log('[boot] 本地已有更高或同等进度 (本地: 第' + localDay + '抽屉, 云端: 第' + cloudDay + '抽屉)');
+                window.__cloudRoleDataPreloaded = null; // 清空预载，强制使用本地最新棋盘
+                var localTimeStr = localSavedAt ? new Date(localSavedAt).toLocaleTimeString() : '最新';
+                var cloudTimeStr = cloudUpdatedAt ? new Date(cloudUpdatedAt).toLocaleTimeString() : '旧快照';
+                __log('[boot] 优先保留本地最新棋盘 (本地: 第' + localDay + '抽屉[' + localTimeStr + '], 云端: 第' + cloudDay + '抽屉[' + cloudTimeStr + '])');
               }
             } catch(e) {
               __log('[boot] 注入云端存档异常: ' + e.message);

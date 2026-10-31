@@ -6515,14 +6515,53 @@
           configurable: true
         });
       }
+      return true;
+    }
 
-      // 针对 ElementInfo 与 ElementDetailWindow 原型注入与发射器 CD 充能/出售共存调度
+    // 专属保障：发射器冷却钻石快速充能与出售按钮无冲突共存调度
+    function applyElementInfoAndCreatorHooks() {
+      if (typeof cc === 'undefined' || !cc.js || !cc.js.getClassByName) return false;
+
+      var elInfoCls = cc.js.getClassByName('ElementInfo');
+      var sellBtnCls = cc.js.getClassByName('ElementInfo_SellButton');
+      var manuCls = cc.js.getClassByName('ManuCreatorElement');
+      var manuRecoverCls = cc.js.getClassByName('ManuCreatorRecover');
+
+      if (!elInfoCls || !elInfoCls.prototype) return false;
+
       try {
-        var elInfoCls = cc.js && cc.js.getClassByName && cc.js.getClassByName('ElementInfo');
-        if (elInfoCls && elInfoCls.prototype && !elInfoCls.prototype.__boostHooked) {
-          elInfoCls.prototype.__boostHooked = true;
+        // 1. ManuCreatorRecover 原型保障：CD 期间 costGem 保证 > 0，杜绝充能按钮被内部定时器错误隐藏
+        if (manuRecoverCls && manuRecoverCls.prototype && !manuRecoverCls.prototype.__cdCostHooked) {
+          manuRecoverCls.prototype.__cdCostHooked = true;
+          var origCostDesc = Object.getOwnPropertyDescriptor(manuRecoverCls.prototype, 'costGem');
+          Object.defineProperty(manuRecoverCls.prototype, 'costGem', {
+            get: function () {
+              var origCost = origCostDesc && origCostDesc.get ? origCostDesc.get.call(this) : 0;
+              try {
+                if (this.data && this.data.cell && this.data.recover) {
+                  var rec = this.data.recover;
+                  var cell = this.data.cell;
+                  var conf = cell.mergeCellData ? cell.mergeCellData.config : null;
+                  var isCd = rec.state === 1 || rec.value === 0;
+                  if (isCd) {
+                    if (origCost > 0) return origCost;
+                    var baseCost = (conf && conf.elementCDCost > 0) ? conf.elementCDCost : 10;
+                    return baseCost;
+                  }
+                }
+              } catch (e) {}
+              return origCost;
+            },
+            enumerable: false,
+            configurable: true
+          });
+        }
 
-          // 1. showElementInfo 增强
+        // 2. ElementInfo 原型注入：showElementInfo、checkNeedShowCreator、showElementInfoCreator
+        if (!elInfoCls.prototype.__cdCoordHooked) {
+          elInfoCls.prototype.__cdCoordHooked = true;
+
+          // (1) showElementInfo
           var origShowInfo = elInfoCls.prototype.showElementInfo;
           elInfoCls.prototype.showElementInfo = function (e, t) {
             var res = origShowInfo.apply(this, arguments);
@@ -6537,7 +6576,6 @@
                 this.label_desc.overflow = cc.Label.Overflow.RESIZE_HEIGHT;
                 this.label_desc.enableWrapText = true;
               }
-              // CD 期间确保充能按钮处于最高可见性
               var targetCell = e || this.cell;
               if (targetCell && targetCell.mergeCellData) {
                 var mcd = targetCell.mergeCellData;
@@ -6547,6 +6585,10 @@
                 var isCd = rec && (rec.value === 0 || rec.state === 1);
                 if (isCd && conf && conf.elementCDStorage > 0) {
                   if (this.btn_gem) this.btn_gem.active = true;
+                  if (this.sellButton) {
+                    this.sellButton.hideAll();
+                    if (this.sellButton.node) this.sellButton.node.width = 0;
+                  }
                   if (this.layout_btn) {
                     this.layout_btn.updateLayout();
                     this.adaptInfoWidth();
@@ -6557,7 +6599,7 @@
             return res;
           };
 
-          // 2. checkNeedShowCreator 兜底保障：冷却中发射器绝不隐藏充能按钮
+          // (2) checkNeedShowCreator 兜底保障
           var origCheckNeedShow = elInfoCls.prototype.checkNeedShowCreator;
           elInfoCls.prototype.checkNeedShowCreator = function (cell) {
             var ok = origCheckNeedShow ? origCheckNeedShow.apply(this, arguments) : false;
@@ -6573,7 +6615,7 @@
             return ok;
           };
 
-          // 3. showElementInfoCreator 兜底保证钻石充能价格与标签显示
+          // (3) showElementInfoCreator 兜底保证钻石充能价格与标签显示
           var origShowCreator = elInfoCls.prototype.showElementInfoCreator;
           elInfoCls.prototype.showElementInfoCreator = function (cell) {
             var res = origShowCreator ? origShowCreator.apply(this, arguments) : undefined;
@@ -6587,7 +6629,7 @@
                 if (isCd && this.btn_gem) {
                   this.btn_gem.active = true;
                   var dyn = cell.dynamicComponents ? cell.dynamicComponents.get("ManuCreatorRecover") : null;
-                  var cost = (dyn && dyn.costGem > 0) ? dyn.costGem : (conf.elementCDCost > 0 ? conf.elementCDCost : 14);
+                  var cost = (dyn && dyn.costGem > 0) ? dyn.costGem : (conf.elementCDCost > 0 ? conf.elementCDCost : 10);
                   if (this.label_gemPrice) {
                     this.label_gemPrice.node.active = true;
                     if (!this.label_gemPrice.string || Number(this.label_gemPrice.string) <= 0) {
@@ -6598,6 +6640,10 @@
                     this.label_speedup.node.active = true;
                     if (this.label_speedup.node.parent) this.label_speedup.node.parent.active = true;
                   }
+                  if (this.sellButton) {
+                    this.sellButton.hideAll();
+                    if (this.sellButton.node) this.sellButton.node.width = 0;
+                  }
                   if (this.layout_btn) this.layout_btn.updateLayout();
                 }
               }
@@ -6606,8 +6652,7 @@
           };
         }
 
-        // 4. ElementInfo_SellButton 原型调度：CD 冷却期避让出售，确保快速充能按钮 100% 显现；非 CD 状态正常出售
-        var sellBtnCls = cc.js && cc.js.getClassByName && cc.js.getClassByName('ElementInfo_SellButton');
+        // 3. ElementInfo_SellButton 原型调度：CD 冷却期避让出售，将底栏空间完全还给钻石充能
         if (sellBtnCls && sellBtnCls.prototype && !sellBtnCls.prototype.__cdCoordHooked) {
           sellBtnCls.prototype.__cdCoordHooked = true;
           var origSellRender = sellBtnCls.prototype.renderView;
@@ -6635,14 +6680,14 @@
 
             if (isCreatorInCd) {
               this.hideAll();
+              if (this.node) this.node.width = 0;
               return;
             }
             return origSellRender.apply(this, arguments);
           };
         }
 
-        // 5. ManuCreatorElement 棋盘点击增强：冷却中点击发射器自动选中并刷新底栏钻石充能
-        var manuCls = cc.js && cc.js.getClassByName && cc.js.getClassByName('ManuCreatorElement');
+        // 4. ManuCreatorElement 棋盘点击增强：冷却中点击发射器自动选中并刷新底栏钻石充能
         if (manuCls && manuCls.prototype && !manuCls.prototype.__quickCdClickHooked) {
           manuCls.prototype.__quickCdClickHooked = true;
           var origClickElem = manuCls.prototype.onClickElement;
@@ -6667,7 +6712,9 @@
             return res;
           };
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('[mock-network] applyElementInfoAndCreatorHooks 异常:', e);
+      }
 
       return true;
     }
@@ -6846,6 +6893,17 @@
         }
         if (gmAttempts >= 120) {
           clearInterval(gmTimer);
+        }
+      }, 300);
+
+      var cdAttempts = 0;
+      var cdTimer = setInterval(function () {
+        cdAttempts++;
+        if (applyElementInfoAndCreatorHooks()) {
+          clearInterval(cdTimer);
+        }
+        if (cdAttempts >= 120) {
+          clearInterval(cdTimer);
         }
       }, 300);
     })();

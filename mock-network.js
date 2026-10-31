@@ -187,6 +187,33 @@
     return cleanCell;
   }
 
+  // 为棋盘注入不可枚举的 toJSON 方法，确保引擎内部 RefreshBoardCache 执行 JSON.parse(JSON.stringify(o)) 时 Map 属性不丢失
+  function installBoardToJSON(board) {
+    if (!board || typeof board !== 'object') return;
+    if (!board.toJSON) {
+      Object.defineProperty(board, 'toJSON', {
+        value: function () {
+          var copy = {};
+          for (var k in this) {
+            if (!Object.prototype.hasOwnProperty.call(this, k) || k === 'toJSON') continue;
+            var val = this[k];
+            if (val instanceof Map) {
+              var mapObj = {};
+              val.forEach(function (mv, mk) { mapObj[mk + ''] = mv; });
+              copy[k] = mapObj;
+            } else {
+              copy[k] = val;
+            }
+          }
+          return copy;
+        },
+        enumerable: false, // 绝不可枚举，不干扰 for...in 与 deepSerialize
+        configurable: true,
+        writable: true
+      });
+    }
+  }
+
   // 获取客户端全局最权威的实时活体棋盘对象
   function getAuthoritativeLiveBoard() {
     try {
@@ -236,10 +263,23 @@
         return false;
       }
 
-      // 同步奖品通道 channel
-      if (liveSource.channel instanceof Map) {
+      // 同步奖品通道 channel：双向合并，坚决不抹除任何一方未领取的物品！
+      if (rb.channel instanceof Map && liveSource.channel instanceof Map) {
+        rb.channel.forEach(function (v, k) {
+          if (!liveSource.channel.has(k)) {
+            liveSource.channel.set(k, v);
+          }
+        });
+        liveSource.channel.forEach(function (v, k) {
+          if (!rb.channel.has(k)) {
+            rb.channel.set(k, v);
+          }
+        });
+      } else if (liveSource.channel instanceof Map && liveSource.channel.size > 0) {
         rb.channel = new Map(liveSource.channel);
       }
+      installBoardToJSON(rb);
+      installBoardToJSON(liveSource);
       // 同步背包/储存箱 bag
       if (liveSource.bag && rb.bag) {
         if (liveSource.bag.items instanceof Map) rb.bag.items = new Map(liveSource.bag.items);
@@ -634,9 +674,10 @@
   function getBoardFor(role, boardId) {
     if (!role || !role.boards) return null;
     var b = boardId != null ? role.boards.get(Number(boardId)) : null;
-    if (b) return b;
+    if (b) { installBoardToJSON(b); return b; }
     var found = null;
     role.boards.forEach(function (v) { if (!found && v && v.type === 1) found = v; }); // Uo.main=1
+    if (found) installBoardToJSON(found);
     return found;
   }
   function ensureOrdersSeeded(role) {
@@ -861,37 +902,93 @@
   //saveNow 闭环。故 mock 只写活体主棋盘 channel,key=itemId(fa.id>0 硬条件,
   //同 itemId 聚合 value),字段与 fa 类(L6760)同构
   function grantChannelElements(role, items, from) {
+    if (!role || !items || !items.length) return 0;
     var board = getBoardFor(role);
     if (!board) return 0;
+    installBoardToJSON(board);
     if (!(board.channel instanceof Map)) board.channel = new Map();
     var n = 0;
+
+    // 允许入通道的道具类型: 7 (元素/发射器), 6 (宝箱), 35 (卡包), 41 (自选宝箱), 42 (发射器箱), 48 (Buff道具/闹钟)
+    var VALID_CHANNEL_TYPES = { 6: true, 7: true, 35: true, 41: true, 42: true, 48: true };
+
     (items || []).forEach(function (it) {
-      if (!it || it.itemType !== 7) return;
-      var ex = board.channel.get(it.itemId);
-      if (ex) ex.value = (ex.value || 0) + it.value;
-      else board.channel.set(it.itemId, {
-        id: it.itemId, itemType: 7, itemId: it.itemId,
-        value: it.value, state: 0, from: from || '', bagId: 0
-      });
+      if (!it || !VALID_CHANNEL_TYPES[it.itemType]) return;
+      var elemId = Number(it.itemId || it.id || 0);
+      var val = Number(it.value || it.count || 1);
+      if (!elemId) return;
+
+      var ex = board.channel.get(elemId);
+      if (ex) {
+        ex.value = (ex.value || 0) + val;
+      } else {
+        board.channel.set(elemId, {
+          id: elemId,
+          itemType: it.itemType,
+          itemId: elemId,
+          value: val,
+          state: 0,
+          from: from || '',
+          bagId: 0
+        });
+      }
       n++;
     });
-    // 立即同步到活体运行时主棋盘(o3.Data.channel), 确保左上角气泡界面即刻刷新并一致
+
+    // 立即多端深度同步到所有活体引用（d3.role, _user_mgr_.role, o3.cacheBoards, o3.Data）
+    var targets = [];
+    if (board) targets.push(board);
     try {
-      if (window.o3) {
-        var rtBoard = window.o3.GetBoardByType ? window.o3.GetBoardByType(1) : window.o3.Data;
-        if (rtBoard && rtBoard.channel instanceof Map && rtBoard.channel !== board.channel) {
-          (items || []).forEach(function (it) {
-            if (!it || it.itemType !== 7) return;
-            var ex = rtBoard.channel.get(it.itemId);
-            if (ex) ex.value = (ex.value || 0) + it.value;
-            else rtBoard.channel.set(it.itemId, {
-              id: it.itemId, itemType: 7, itemId: it.itemId,
-              value: it.value, state: 0, from: from || '', bagId: 0
-            });
-          });
+      if (typeof window !== 'undefined') {
+        if (window.d3 && window.d3.role && window.d3.role.boards) {
+          var db = window.d3.role.boards.get(1);
+          if (db && targets.indexOf(db) < 0) targets.push(db);
+        }
+        if (window._user_mgr_ && window._user_mgr_.role && window._user_mgr_.role.boards) {
+          var ub = window._user_mgr_.role.boards.get(1);
+          if (ub && targets.indexOf(ub) < 0) targets.push(ub);
+        }
+        if (window.o3) {
+          if (window.o3.cacheBoards instanceof Map) {
+            var cb = window.o3.cacheBoards.get(1);
+            if (cb && targets.indexOf(cb) < 0) targets.push(cb);
+          }
+          if (window.o3.Data && targets.indexOf(window.o3.Data) < 0) {
+            targets.push(window.o3.Data);
+          }
         }
       }
     } catch (e) {}
+
+    targets.forEach(function (tb) {
+      if (!tb) return;
+      installBoardToJSON(tb);
+      if (!(tb.channel instanceof Map)) tb.channel = new Map();
+      board.channel.forEach(function (v, k) {
+        var ex = tb.channel.get(k);
+        if (ex) {
+          ex.value = v.value;
+        } else {
+          tb.channel.set(k, {
+            id: v.id,
+            itemType: v.itemType,
+            itemId: v.itemId,
+            value: v.value,
+            state: v.state || 0,
+            from: v.from || '',
+            bagId: v.bagId || 0
+          });
+        }
+      });
+    });
+
+    // 触发客户端气泡与通道即刻刷新
+    try {
+      if (typeof window !== 'undefined' && window.w && window.g && window.g.RefreshChannel) {
+        window.w.emit(window.g.RefreshChannel);
+      }
+    } catch (e) {}
+
     return n;
   }
   // channel 是通道奖励载体: 废弃暴力清空逻辑，保证未取出的奖励持久化不丢
@@ -1165,13 +1262,25 @@
     var boardId = Number(params.boardId) || 1;
     var board = role.boards.get(boardId);
     if (!board) return null;
+    installBoardToJSON(board);
     var toIndex = Number(params.toIndex);
     var channelItemId = Number(params.id);
 
-    // 1. 从 channel 中找到该待飞入物品
+    // 1. 从 channel 中找到该待飞入物品（支持 key/id/itemId 深度匹配）
     var targetChannelItem = null;
+    var targetKey = null;
     if (board.channel instanceof Map) {
-      targetChannelItem = board.channel.get(channelItemId);
+      targetChannelItem = board.channel.get(channelItemId) || board.channel.get(String(channelItemId));
+      if (targetChannelItem) {
+        targetKey = channelItemId;
+      } else {
+        board.channel.forEach(function (v, k) {
+          if (!targetChannelItem && v && (Number(v.id) === channelItemId || Number(v.itemId) === channelItemId)) {
+            targetChannelItem = v;
+            targetKey = k;
+          }
+        });
+      }
     }
     if (!targetChannelItem) {
       console.warn('[mock-channel] 通道中未找到物品 id:', channelItemId);
@@ -1179,13 +1288,44 @@
     }
 
     var elemId = targetChannelItem.itemId || targetChannelItem.id;
+    var delKey = targetKey != null ? targetKey : channelItemId;
 
     // 2. 扣除或移出 channel
     if (targetChannelItem.value > 1) {
       targetChannelItem.value -= 1;
     } else {
-      board.channel.delete(channelItemId);
+      board.channel.delete(delKey);
     }
+
+    // 同步从各运行时棋盘的 channel 中扣除
+    try {
+      if (typeof window !== 'undefined') {
+        var rts = [];
+        if (window.o3) {
+          if (window.o3.cacheBoards instanceof Map) {
+            var cb = window.o3.cacheBoards.get(boardId);
+            if (cb) rts.push(cb);
+          }
+          if (window.o3.Data) rts.push(window.o3.Data);
+        }
+        if (window.d3 && window.d3.role && window.d3.role.boards) {
+          var db = window.d3.role.boards.get(boardId);
+          if (db) rts.push(db);
+        }
+        rts.forEach(function (rt) {
+          if (rt && rt.channel instanceof Map) {
+            var item = rt.channel.get(channelItemId) || rt.channel.get(delKey);
+            if (item) {
+              if (item.value > 1) item.value -= 1;
+              else {
+                rt.channel.delete(channelItemId);
+                rt.channel.delete(delKey);
+              }
+            }
+          }
+        });
+      }
+    } catch (e) {}
 
     // 3. 在 board.cells 的 toIndex 生成新格子(GdCell 结构)
     if (!(board.cells instanceof Map)) board.cells = new Map();
@@ -3271,6 +3411,7 @@
           });
         }
       }
+      if (role.boards) role.boards.forEach(installBoardToJSON);
       console.log('[mock-save] 已恢复本地存档: cells=' + b1.cells.size + ', id=' + saved.id);
       window.__mockLastRestore = { ok: true, err: null, at: Date.now() };
       return true;
@@ -3500,6 +3641,7 @@
     //有存档时等 rolelogin 恢复后再种(restoreSavedRole/loadOrderConfig 负责),
     //不在"恢复前窗口"碰 role
     if (!hasSavedRole() || restoreDone) ensureOrdersSeeded(role);
+    if (role.boards) role.boards.forEach(installBoardToJSON);
     pullCloudMails(role);
     console.log('[mock-network] Role 数据已就绪, roleId:', role.id, 'MainBoard cells:', role.boards.get(1).cells.size, hasSavedRole() ? '(存档待 rolelogin 注入)' : '(全新开局)');
   }
@@ -3621,6 +3763,7 @@
         patchRuntimeElementConfigs();
         var bType = Number(t.params && t.params.boardType) || 1;
         var curBoard = currentRole.boards && currentRole.boards.get(bType);
+        if (curBoard) installBoardToJSON(curBoard);
         return Promise.resolve({
           code: 0,
           getData: function () {
@@ -3854,7 +3997,11 @@
               role: currentRole
             };
           },
-          rawData: { code: cpCell ? 0 : 1 }
+          rawData: {
+            code: cpCell ? 0 : 1,
+            cells: cpCell ? [cpCell] : [],
+            role: currentRole
+          }
         }).then(function (r) { scheduleSave(); return r; });
       }
       // ===== 阶段二：常规背包与发射器仓库 RPC =====
@@ -4328,8 +4475,19 @@
           mailRewards = found.rewards || [];
           grantCurrency(currentRole, mailRewards);
           grantChannelElements(currentRole, mailRewards, 'mail');
+          // 深度兼容：确保当前活体 d3.role / _user_mgr_ 同步入账
+          try {
+            if (window.d3 && window.d3.role && window.d3.role !== currentRole) {
+              grantCurrency(window.d3.role, mailRewards);
+              grantChannelElements(window.d3.role, mailRewards, 'mail');
+            }
+            if (window._user_mgr_ && window._user_mgr_.role && window._user_mgr_.role !== currentRole) {
+              grantCurrency(window._user_mgr_.role, mailRewards);
+              grantChannelElements(window._user_mgr_.role, mailRewards, 'mail');
+            }
+          } catch (e) {}
           currentRole.mailNewCount = Math.max(0, (currentRole.mailNewCount || 0) - 1);
-          console.log('[mock-mail] 成功领取邮件 ' + mId + ' 附件奖励:', mailRewards);
+          console.log('[mock-mail] 成功领取邮件 ' + mId + ' 附件奖励并注入待领气泡:', mailRewards);
           scheduleSave();
         }
         return Promise.resolve({
@@ -4337,7 +4495,11 @@
           getData: function () {
             return { role: currentRole, rewards: mailRewards };
           },
-          rawData: { code: 0 }
+          rawData: {
+            code: 0,
+            role: currentRole,
+            rewards: mailRewards
+          }
         });
       }
       if (currentRole && gcmd === 'newplayergift_reward') {

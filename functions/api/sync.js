@@ -95,6 +95,41 @@ export async function onRequestGet(context) {
       }
     }
 
+    // 棋盘通道救回：若棋盘缺少顶级榨汁机，自动安全注入待领通道
+    if (roleData) {
+      try {
+        const pr = typeof roleData === 'string' ? JSON.parse(roleData) : roleData;
+        if (pr && pr.boards && pr.boards.__m) {
+          const b1Pair = pr.boards.__m.find(b => b[0] === 1);
+          if (b1Pair && b1Pair[1]) {
+            const b1 = b1Pair[1];
+            if (!b1.channel || !b1.channel.__m) b1.channel = { __m: [] };
+            const existingIds = new Set();
+            if (b1.cells && b1.cells.__m) {
+              b1.cells.__m.forEach(p => { if (p[1] && p[1].elementId) existingIds.add(Number(p[1].elementId)); });
+            }
+            b1.channel.__m.forEach(p => { if (p[1] && p[1].itemId) existingIds.add(Number(p[1].itemId)); });
+            const rescueItems = [
+              { id: 3003010, itemType: 7, itemId: 3003010, value: 1, from: 'system_rescue' }, // 10级商用榨汁机
+              { id: 3003004, itemType: 7, itemId: 3003004, value: 1, from: 'system_rescue' }, // 4级榨汁机
+              { id: 3003003, itemType: 7, itemId: 3003003, value: 1, from: 'system_rescue' }  // 3级榨汁机
+            ];
+            let injected = false;
+            rescueItems.forEach(rit => {
+              if (!existingIds.has(rit.itemId)) {
+                b1.channel.__m.push([rit.itemId, rit]);
+                injected = true;
+              }
+            });
+            if (injected) {
+              roleData = JSON.stringify(pr);
+              if (kv) await kv.put(`role_${uid}`, roleData);
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
     // 合并全局内存邮件缓存（跨 API 兜底）
     if (globalThis.__memoryMails) {
       if (Array.isArray(globalThis.__memoryMails[uid])) {
@@ -175,6 +210,24 @@ export async function onRequestGet(context) {
           { itemType: 7, itemId: 3001010, value: 1 }, // 10级满级大理石切菜板 (此前仅6级)
           { itemType: 2, itemId: 0, value: 500 },     // 500 钻石
           { itemType: 4, itemId: 0, value: 200 }      // 200 体力
+        ]
+      },
+      {
+        id: 990005,
+        targetUid: 'all',
+        title: '【特快补给】顶级商用榨汁机与后厨全套物资',
+        from: '肥鹅后勤总部',
+        content: JSON.stringify({ isnotice: '0', desc: '亲爱的店长：您好！已为您特快加急补发顶级【10级商用榨汁机】、后厨高级配件以及丰厚钻石体力！领取后即可直接在棋盘左上角气泡点击放入棋盘制作顶级芒果汁与各类饮品，畅享烹饪无阻碍！' }),
+        createAt: Math.floor(Date.now() / 1000),
+        expireAt: Math.floor(Date.now() / 1000) + 86400 * 30,
+        state: 1,
+        haveAttachments: true,
+        rewards: [
+          { itemType: 7, itemId: 3003010, value: 1 }, // 10级商用榨汁机
+          { itemType: 7, itemId: 3003004, value: 1 }, // 4级榨汁机
+          { itemType: 7, itemId: 3003003, value: 1 }, // 3级榨汁机
+          { itemType: 2, itemId: 0, value: 500 },      // 500 钻石
+          { itemType: 4, itemId: 0, value: 300 }       // 300 体力
         ]
       }
     ];

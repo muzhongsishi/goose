@@ -26,6 +26,19 @@
     if (!String.prototype.getDay) String.prototype.getDay = function () { var t = Date.parse(String(this)); return new Date(isNaN(t) ? 0 : t).getDay(); };
   } catch (e) {}
 
+  // Map 序列化免疫补丁: 客户端切换场景还原棋盘时执行 r.setValue(JSON.parse(JSON.stringify(e))),
+  // 原生 JSON.stringify(Map) 会丢失全部内容变成 {}，导致棋盘格子全毁或回退错位。
+  // 注入 toJSON 确保 Map 无损序列化为字典对象，供客户端 io/no 完美还原。
+  try {
+    if (!Map.prototype.toJSON) {
+      Map.prototype.toJSON = function () {
+        var obj = {};
+        this.forEach(function (v, k) { obj[String(k)] = v; });
+        return obj;
+      };
+    }
+  } catch (e) {}
+
   // 本文件先于 weapp-adapter 执行,此刻 window.localStorage 仍是原生对象;
   // 之后 adapter 会把它替换成自己的模块,存档必须始终走原生引用
   const nativeLocalStorage = window.localStorage;
@@ -136,69 +149,136 @@
     for (var ri = 0; ri < roots.length; ri++) scan(roots[ri], 0);
     return found;
   }
+  // 提取纯净的 remoteData，彻底剥离 Cocos 节点与组件对象，保证无损序列化和无引用交叉
+  function extractCleanCellData(cVal, cKey) {
+    if (!cVal) return null;
+    var raw = (cVal.mergeCellData && cVal.mergeCellData.remoteData) || cVal;
+    if (!raw || typeof raw !== 'object') return null;
+
+    var cleanCell = {
+      index: Number(raw.index !== undefined ? raw.index : cKey),
+      elementId: Number(raw.elementId) || 0,
+      state: Number(raw.state) || 0,
+      hp: Number(raw.hp) || 0,
+      uUID: Number(raw.uUID) || 0,
+      seed: Number(raw.seed) || 0
+    };
+
+    if (raw.order) {
+      var elemMap = new Map();
+      if (raw.order.elements instanceof Map) {
+        raw.order.elements.forEach(function (v, k) { elemMap.set(k, v); });
+      }
+      cleanCell.order = {
+        orderId: Number(raw.order.orderId) || 0,
+        state: Number(raw.order.state) || 0,
+        startTime: Number(raw.order.startTime) || 0,
+        endTime: Number(raw.order.endTime) || 0,
+        elements: elemMap
+      };
+    }
+
+    if (raw.recovery instanceof Map) {
+      var recMap = new Map();
+      raw.recovery.forEach(function (rv, rk) {
+        if (rv) {
+          recMap.set(rk, {
+            startTime: Number(rv.startTime) || 0,
+            endTime: Number(rv.endTime) || 0,
+            value: Number(rv.value) || 0,
+            state: Number(rv.state) || 0
+          });
+        }
+      });
+      cleanCell.recovery = recMap;
+    }
+
+    if (Array.isArray(raw.hiddenPocket)) {
+      cleanCell.hiddenPocket = raw.hiddenPocket.slice();
+    }
+
+    return cleanCell;
+  }
+
+  // 获取客户端全局最权威的实时活体棋盘对象
+  function getAuthoritativeLiveBoard() {
+    try {
+      // 优先级 1: window.o3.cacheBoards.get(1)（当前活跃棋盘缓存，包含所有拖拽与合成的最终结果）
+      if (typeof window !== 'undefined' && window.o3 && window.o3.cacheBoards instanceof Map) {
+        var cb = window.o3.cacheBoards.get(1);
+        if (cb && cb.cells instanceof Map && cb.cells.size >= 40) return cb;
+      }
+      // 优先级 2: window.o3.Data
+      if (typeof window !== 'undefined' && window.o3 && window.o3.Data && window.o3.Data.cells instanceof Map && window.o3.Data.cells.size >= 40) {
+        return window.o3.Data;
+      }
+      // 优先级 3: window.d3.role.boards.get(1)
+      if (typeof window !== 'undefined' && window.d3 && window.d3.role && window.d3.role.boards instanceof Map) {
+        var db = window.d3.role.boards.get(1);
+        if (db && db.cells instanceof Map && db.cells.size >= 40) return db;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  // 抓取并同步活体棋盘到 role.boards（绝不共享引用，保证纯净深拷贝）
   function syncRuntimeBoardsToRole(role) {
     try {
       if (!role || !(role.boards instanceof Map)) return false;
-      var runtimeBoards = findRuntimeBoards();
+      var liveSource = getAuthoritativeLiveBoard();
+      if (!liveSource || !liveSource.cells || !(liveSource.cells instanceof Map) || liveSource.cells.size < 40) {
+        return false;
+      }
 
-      // 1. 优先从权威的 window.o3.cacheBoards / Data 补充
-      try {
-        if (window.o3 && window.o3.cacheBoards instanceof Map) {
-          window.o3.cacheBoards.forEach(function (cb) {
-            if (cb && cb.cells instanceof Map && cb.cells.size >= 40) {
-              if (!runtimeBoards.some(function (b) { return b === cb || b.id === cb.id; })) {
-                runtimeBoards.unshift(cb);
-              }
-            }
-          });
+      var rb = role.boards.get(1);
+      if (!rb) return false;
+
+      if (!(rb.cells instanceof Map)) rb.cells = new Map();
+      rb.cells.clear();
+
+      liveSource.cells.forEach(function (cVal, cKey) {
+        var clean = extractCleanCellData(cVal, cKey);
+        if (clean) {
+          rb.cells.set(Number(cKey), clean);
         }
-        if (window.o3 && window.o3.Data && window.o3.Data.cells instanceof Map && window.o3.Data.cells.size >= 40) {
-          var o3D = window.o3.Data;
-          if (!runtimeBoards.some(function (b) { return b === o3D || b.id === o3D.id; })) {
-            runtimeBoards.unshift(o3D);
+      });
+
+      // 同步奖品通道 channel
+      if (liveSource.channel instanceof Map) {
+        rb.channel = new Map(liveSource.channel);
+      }
+      // 同步背包/储存箱 bag
+      if (liveSource.bag && rb.bag) {
+        if (liveSource.bag.items instanceof Map) rb.bag.items = new Map(liveSource.bag.items);
+        if (liveSource.bag.size) rb.bag.size = liveSource.bag.size;
+      }
+      // 同步天数与抽屉进度
+      if (liveSource.orderDrawerEndId != null && Number(liveSource.orderDrawerEndId) > (Number(rb.orderDrawerEndId) || 0)) {
+        rb.orderDrawerEndId = Number(liveSource.orderDrawerEndId);
+      }
+      if (liveSource.orderDrawerNeedReward) rb.orderDrawerNeedReward = liveSource.orderDrawerNeedReward;
+      if (liveSource.incrementId) rb.incrementId = Number(liveSource.incrementId);
+
+      // 同步到全局 window.d3.role.boards，让客户端其他模块读取一致
+      try {
+        if (window.d3 && window.d3.role && window.d3.role.boards instanceof Map && window.d3.role.boards.get(1) !== rb) {
+          var d3Board = window.d3.role.boards.get(1);
+          if (d3Board && d3Board.cells instanceof Map) {
+            d3Board.cells.clear();
+            rb.cells.forEach(function (cv, ck) { d3Board.cells.set(ck, cv); });
           }
         }
       } catch (e) {}
 
-      var synced = 0;
-      role.boards.forEach(function (rb) {
-        if (!rb || !(rb.cells instanceof Map)) return;
-        // 按 id 匹配运行时副本,匹配不上且只有一个副本时也回填主棋盘
-        var match = runtimeBoards.filter(function (m) { return m.id === rb.id; })[0];
-        if (!match && runtimeBoards.length === 1 && rb.cells.size > 0) match = runtimeBoards[0];
-        if (match && match.cells && match.cells instanceof Map && match.cells.size > 0) {
-          // 深度同步每个格子数据，防止引用断裂
-          match.cells.forEach(function (cVal, cKey) {
-            var cellData = (cVal && cVal.mergeCellData && cVal.mergeCellData.remoteData) || cVal;
-            rb.cells.set(Number(cKey), cellData);
-          });
-          rb.cells = match.cells;   // 共享引用:运行时后续写入直接进 role
-          synced++;
-        }
-        if (match && match.channel instanceof Map && match.channel !== rb.channel) {
-          // 共享 channel 引用: 运行时消费/删除奖品直接反映到 role, 防止全量覆盖导致已消费奖品还魂
-          rb.channel = match.channel;
-        }
-        if (match && match.bag && rb.bag) {
-          // 共享 bag 引用: 运行时存入/取出直接反映到 role
-          if (match.bag.items instanceof Map) rb.bag.items = match.bag.items;
-          if (match.bag.size) rb.bag.size = match.bag.size;
-        }
-        if (match) {
-          // 同步抽屉进度 orderDrawerEndId (反映真实天数进度)
-          if (match.orderDrawerEndId != null && Number(match.orderDrawerEndId) > (Number(rb.orderDrawerEndId) || 0)) {
-            rb.orderDrawerEndId = Number(match.orderDrawerEndId);
-          }
-          if (match.orderDrawerNeedReward) rb.orderDrawerNeedReward = match.orderDrawerNeedReward;
-          if (match.incrementId) rb.incrementId = match.incrementId;
-        }
-      });
-      if (synced && !window.__mockBoardSyncedLog) {
-        console.log('[mock-save] 运行时棋盘已绑定到 role(存档将反映合成/移动等操作)');
+      if (!window.__mockBoardSyncedLog) {
+        console.log('[mock-save] 权威活体棋盘已成功同步到 role 镜像，无污染无引用错位');
         window.__mockBoardSyncedLog = true;
       }
-      return synced > 0;
-    } catch (e) { return false; }
+      return true;
+    } catch (e) {
+      console.warn('[mock-sync] syncRuntimeBoardsToRole 异常:', e && e.message);
+      return false;
+    }
   }
 
   // 确保开火格子的 OrderRecover 组件处于激活状态 (解决厨具原位无法钻石加速问题)
@@ -2938,186 +3018,51 @@
   }
 
   function applyCellMove(role, params) {
+    // 客户端已在本地完全执行了移动、合成与副产物计算。
+    // 服务端不再重复搬动格子，直接同步客户端权威活体状态并结算任务/通行证，彻底杜绝二次位移与错乱！
     syncRuntimeBoardsToRole(role);
-    var b = getBoardFor(role, params && params.boardId);
-    if (!b || !(b.cells instanceof Map)) return { ok: false, error: '棋盘未就绪' };
-
-    var fromIdx = Number(params && params.index);
-    var toIdx = Number(params && params.toIndex);
-    var moveType = Number(params && params.moveType) || 1;
-
-    console.log('[mock-move] 移动/合成请求: moveType=' + moveType + ' from=' + fromIdx + ' -> to=' + toIdx);
-
-    if (moveType === 1) {
-      // 普通移动
-      var fromCell = b.cells.get(fromIdx);
-      if (fromCell) {
-        b.cells.delete(fromIdx);
-        fromCell.index = toIdx;
-        b.cells.set(toIdx, fromCell);
-      }
-    } else if (moveType === 2) {
-      // 合成
-      var sourceCell = b.cells.get(fromIdx);
-      var targetCell = b.cells.get(toIdx);
-
-      // 源格子在合成后必定被消耗清除
-      b.cells.delete(fromIdx);
-
-      // 计算合成后新元素的 elementId
-      var targetElemId = (targetCell && Number(targetCell.elementId)) || (sourceCell && Number(sourceCell.elementId)) || 0;
-      var newElemId = 0;
-
-      // 1. 若 params.cells 显式包含了 toIdx 的新元素，直接采纳
-      if (Array.isArray(params && params.cells)) {
-        for (var i = 0; i < params.cells.length; i++) {
-          var c = params.cells[i];
-          if (c && Number(c.index) === toIdx && Number(c.elementId) > 0) {
-            newElemId = Number(c.elementId);
-            break;
-          }
-        }
-      }
-
-      // 2. 若未显式给出，查配置表中的 mergeElementId
-      if (!newElemId && targetElemId > 0 && TABLES.element) {
-        var allElems = tableEntries(TABLES.element);
-        for (var j = 0; j < allElems.length; j++) {
-          if (Number(allElems[j].id) === targetElemId) {
-            newElemId = Number(allElems[j].mergeElementId) || 0;
-            break;
-          }
-        }
-      }
-
-      // 3. 兜底推进：若配置表未命中则递增一级
-      if (!newElemId && targetElemId > 0) {
-        newElemId = targetElemId + 1;
-      }
-
-      // 新手教程前期保护：在官方引导 1013 步合成 5 级蔬菜箱之前，限制篮子发射器最高只能到 4 级蔬果篮 (1001104)
-      var mergeStep = (role.guide instanceof Map && role.guide.get('Merge')) || 0;
-      if (mergeStep < 1013 && newElemId === 1001105) {
-        console.warn('[mock-move] 新手引导期防越级保护: 限制方提篮合成，保持 4 级蔬果篮 (1001104)');
-        newElemId = 1001104;
-      }
-
-      b.incrementId = (Number(b.incrementId) || 100) + 1;
-      var mergedCell = {
-        elementId: newElemId,
-        index: toIdx,
-        state: 0,
-        hp: 0,
-        uUID: b.incrementId,
-        seed: Math.floor(Math.random() * 100000) + 1
-      };
-      trackWeekTaskProgress(role, 0, 1);
-      addPassPoints(role, 1);
-      addEnergyPassPoints(role, 1);
-      if (targetCell) {
-        Object.assign(targetCell, mergedCell);
-        b.cells.set(toIdx, targetCell);
-      } else {
-        b.cells.set(toIdx, mergedCell);
-      }
-
-      // 4. 处理额外生成的副产物或气泡
-      if (Array.isArray(params && params.cells)) {
-        params.cells.forEach(function (extra) {
-          if (extra && Number(extra.index) !== toIdx && Number(extra.elementId) > 0) {
-            b.incrementId = (Number(b.incrementId) || 100) + 1;
-            var ec = Object.assign({}, extra, {
-              index: Number(extra.index),
-              elementId: Number(extra.elementId),
-              uUID: b.incrementId,
-              seed: Math.floor(Math.random() * 100000) + 1
-            });
-            b.cells.set(ec.index, ec);
-          }
-        });
-      }
-
-      // 5. 处理 emitCells / emitIndex 产生的格子
-      if (Array.isArray(params && params.emitCells)) {
-        params.emitCells.forEach(function (ec) {
-          if (ec && Number(ec.index) >= 0 && Number(ec.elementId) > 0) {
-            b.incrementId = (Number(b.incrementId) || 100) + 1;
-            b.cells.set(Number(ec.index), {
-              elementId: Number(ec.elementId),
-              index: Number(ec.index),
-              state: 0,
-              hp: 0,
-              uUID: b.incrementId,
-              seed: Math.floor(Math.random() * 100000) + 1
-            });
-          }
-        });
-      }
-
-      console.log('[mock-move] 合成完成: from=' + fromIdx + ' -> to=' + toIdx + ' newElemId=' + newElemId);
-    }
-
+    trackWeekTaskProgress(role, 0, 1);
+    addPassPoints(role, 1);
+    addEnergyPassPoints(role, 1);
     return { ok: true };
   }
 
   function applyMultipleCellMove(role, params) {
-    if (params && Array.isArray(params.moves)) {
-      params.moves.forEach(function (m) {
-        applyCellMove(role, m);
-      });
-    }
+    syncRuntimeBoardsToRole(role);
+    var count = (params && Array.isArray(params.moves)) ? params.moves.length : 1;
+    trackWeekTaskProgress(role, 0, count);
+    addPassPoints(role, count);
+    addEnergyPassPoints(role, count);
     return { ok: true };
   }
 
   // 发射器产出
   function applyCellProduct(role, params) {
-    syncRuntimeBoardsToRole(role);
-    var b = getBoardFor(role, params && params.boardId);
-    if (!b || !(b.cells instanceof Map)) return { ok: false, error: '棋盘未就绪' };
-
-    var fromIdx = Number(params && params.index);
     var items = (params && Array.isArray(params.cells)) ? params.cells : [];
-    var newCells = [];
     var totalCost = 0;
-
     items.forEach(function (it) {
-      if (!it || it.elementId == null || it.index == null) return;
-      var cIdx = Number(it.index);
-      var elemId = Number(it.elementId);
-      var cost = Number(it.cost) || 0;
-      totalCost += cost;
-
-      b.incrementId = (Number(b.incrementId) || 100) + 1;
-      var newCell = {
-        elementId: elemId,
-        index: cIdx,
-        state: 0,
-        hp: 0,
-        uUID: b.incrementId,
-        seed: Math.floor(Math.random() * 100000) + 1
-      };
-      b.cells.set(cIdx, newCell);
-      newCells.push(newCell);
+      if (it && it.cost) totalCost += Number(it.cost) || 0;
     });
 
     if (totalCost > 0 && role.energy != null) {
-      role.energy = Math.max(0, Number(role.energy) - totalCost);
+      if (typeof role.energy === 'object' && role.energy.value !== undefined) {
+        role.energy.value = Math.max(0, Number(role.energy.value) - totalCost);
+      } else {
+        role.energy = Math.max(0, Number(role.energy) - totalCost);
+      }
     }
-    trackWeekTaskProgress(role, 0, newCells.length);
-    addPassPoints(role, newCells.length);
-
-    console.log('[mock-product] 产出元素: fromIdx=' + fromIdx + ' 产出数量=' + newCells.length + ' 消耗体力=' + totalCost);
-    return { ok: true, cells: newCells };
+    trackWeekTaskProgress(role, 0, Math.max(1, items.length));
+    addPassPoints(role, Math.max(1, items.length));
+    syncRuntimeBoardsToRole(role);
+    return { ok: true, cells: items };
   }
 
   function applyMultipleCellProduct(role, params) {
     if (params && Array.isArray(params.productInformation)) {
-      var allCells = [];
       params.productInformation.forEach(function (info) {
-        var res = applyCellProduct(role, Object.assign({}, params, info));
-        if (res && res.cells) allCells.push.apply(allCells, res.cells);
+        applyCellProduct(role, Object.assign({}, params, info));
       });
-      return { ok: true, cells: allCells };
+      return { ok: true };
     }
     return applyCellProduct(role, params);
   }
@@ -3125,102 +3070,35 @@
   // 资源/元素收集 (金币、体力胶囊等)
   function applyCellCollect(role, params) {
     syncRuntimeBoardsToRole(role);
-    var b = getBoardFor(role, params && params.boardId);
-    if (!b || !(b.cells instanceof Map)) return { ok: false, error: '棋盘未就绪' };
-
-    var idx = Number(params && params.index);
-    var cell = b.cells.get(idx);
-    if (cell) {
-      b.cells.delete(idx);
-      console.log('[mock-collect] 收集格子元素: index=' + idx + ' elem=' + cell.elementId);
-    }
     return { ok: true };
   }
 
   function applyMultipleCellCollect(role, params) {
-    if (params && Array.isArray(params.collectInformation)) {
-      params.collectInformation.forEach(function (info) {
-        applyCellCollect(role, Object.assign({}, params, info));
-      });
-      return { ok: true };
-    }
-    return applyCellCollect(role, params);
+    syncRuntimeBoardsToRole(role);
+    return { ok: true };
   }
 
   // 蜘蛛网/箱子开启
   function applyCellOpen(role, params) {
     syncRuntimeBoardsToRole(role);
-    var b = getBoardFor(role, params && params.boardId);
-    if (!b || !(b.cells instanceof Map)) return { ok: false, error: '棋盘未就绪' };
-
-    var idx = Number(params && params.index);
-    var cell = b.cells.get(idx);
-    if (cell) {
-      cell.state = 0; // 解除锁网状态
-      cell.openEnd = 0;
-      console.log('[mock-cellopen] 解锁/开启格子: index=' + idx + ' elem=' + cell.elementId);
-      return { ok: true, cell: cell };
-    }
-    return { ok: true, cell: null };
+    return { ok: true };
   }
 
   // 戳破气泡
   function applyBreakBubble(role, params) {
     syncRuntimeBoardsToRole(role);
-    var b = getBoardFor(role, params && params.boardId);
-    if (!b || !(b.cells instanceof Map)) return { ok: false, error: '棋盘未就绪' };
-
-    var idx = Number(params && params.index);
-    var cell = b.cells.get(idx);
-    if (cell) {
-      b.cells.delete(idx);
-      console.log('[mock-bubble] 戳破气泡: index=' + idx);
-    }
     return { ok: true };
   }
 
   // 额外掉落/气泡喷出
   function applyCellEmitExtra(role, params) {
     syncRuntimeBoardsToRole(role);
-    var b = getBoardFor(role, params && params.boardId);
-    if (!b || !(b.cells instanceof Map)) return { ok: false, error: '棋盘未就绪' };
-
-    var emitCells = (params && Array.isArray(params.emitCells)) ? params.emitCells : [];
-    var newCells = [];
-    emitCells.forEach(function (ec) {
-      if (!ec || ec.elementId == null || ec.index == null) return;
-      var cIdx = Number(ec.index);
-      b.incrementId = (Number(b.incrementId) || 100) + 1;
-      var cell = Object.assign({}, ec, {
-        index: cIdx,
-        elementId: Number(ec.elementId),
-        uUID: b.incrementId,
-        seed: Math.floor(Math.random() * 100000) + 1
-      });
-      b.cells.set(cIdx, cell);
-      newCells.push(cell);
-    });
-    console.log('[mock-emitextra] 喷出副产物/气泡: 数量=' + newCells.length);
-    return { ok: true, cells: newCells };
+    return { ok: true, cells: [] };
   }
 
   // 撤销移动/操作
   function applyCellUndo(role, params) {
     syncRuntimeBoardsToRole(role);
-    var b = getBoardFor(role, params && params.boardId);
-    if (!b || !(b.cells instanceof Map)) return { ok: false, error: '棋盘未就绪' };
-
-    var fromIdx = Number(params && params.fromIndex);
-    var toIdx = Number(params && params.toIndex);
-    if (toIdx >= 0 && b.cells.has(toIdx)) {
-      var cell = b.cells.get(toIdx);
-      b.cells.delete(toIdx);
-      if (fromIdx >= 0) {
-        cell.index = fromIdx;
-        b.cells.set(fromIdx, cell);
-      }
-      console.log('[mock-undo] 撤销移动: from ' + toIdx + ' back to ' + fromIdx);
-    }
     return { ok: true };
   }
 
@@ -3743,7 +3621,11 @@
               board: curBoard || null
             };
           },
-          rawData: { code: 0 }
+          rawData: {
+            code: 0,
+            role: currentRole,
+            board: curBoard || null
+          }
         });
       }
       // 棋盘加速/买CD: 包含做菜钻石加速、菜篮子/生成器充能加速

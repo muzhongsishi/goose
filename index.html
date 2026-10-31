@@ -531,6 +531,50 @@
       return Promise.all(pTexts.concat(pBins));
     }).catch(function (e) { __log('[preload] cacheList 解析失败: ' + e.message); return Promise.all(configPaths.map(preloadText)); })
     .then(function () {
+      var currentUid = (window.getCurrentPlayerUID ? window.getCurrentPlayerUID() : (localStorage.getItem('fe_player_uid') || '1001')).trim();
+      __log('[boot] 正在拉取 [' + currentUid + '] 云端高精度存档...');
+      return fetch('/api/sync?uid=' + encodeURIComponent(currentUid) + '&_t=' + Date.now(), { cache: 'no-store' })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (data && data.ok && data.roleData) {
+            var cloudRoleStr = typeof data.roleData === 'string' ? data.roleData : JSON.stringify(data.roleData);
+            try {
+              var cloudParsed = JSON.parse(cloudRoleStr);
+              var cloudDay = 1;
+              if (cloudParsed.boards && cloudParsed.boards.__m) {
+                var b1 = cloudParsed.boards.__m.find(function(b) { return b[0] === 1; });
+                if (b1 && b1[1] && b1[1].orderDrawerEndId) cloudDay = Number(b1[1].orderDrawerEndId);
+              }
+              var localRaw = localStorage.getItem('fe_saved_role_v1');
+              var localDay = 0;
+              if (localRaw) {
+                try {
+                  var localParsed = JSON.parse(localRaw);
+                  if (localParsed.boards && localParsed.boards.__m) {
+                    var lb1 = localParsed.boards.__m.find(function(b) { return b[0] === 1; });
+                    if (lb1 && lb1[1] && lb1[1].orderDrawerEndId) localDay = Number(lb1[1].orderDrawerEndId);
+                  }
+                } catch(e) {}
+              }
+              var hasUrlUid = false;
+              try { hasUrlUid = !!new URLSearchParams(location.search).get('uid'); } catch(e) {}
+              if (hasUrlUid || !localRaw || cloudDay >= localDay) {
+                localStorage.setItem('fe_saved_role_v1', cloudRoleStr);
+                localStorage.setItem('fe_saved_role_v1_' + currentUid, cloudRoleStr);
+                window.__cloudRoleDataPreloaded = data.roleData;
+                __log('[boot] 云端存档已注入本地 (云端进度: 第' + cloudDay + '抽屉, 本地原为: 第' + localDay + '抽屉)');
+              } else {
+                __log('[boot] 本地已有更高或同等进度 (本地: 第' + localDay + '抽屉, 云端: 第' + cloudDay + '抽屉)');
+              }
+            } catch(e) {
+              __log('[boot] 注入云端存档异常: ' + e.message);
+            }
+          }
+        }).catch(function (e) {
+          __log('[boot] 拉取云端存档失败(离线启动): ' + e.message);
+        });
+    })
+    .then(function () {
       __log('[boot] 预加载完成,开始 fetch game.js');
       return fetch('game.js').then(function (r) { return r.text(); });
     }).then(function (src) {

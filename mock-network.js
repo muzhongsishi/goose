@@ -2793,7 +2793,18 @@
   function restoreSavedRole(role) {
     if (restoreDone) return false;
     try {
-      var raw = nativeLocalStorage.getItem(SAVE_KEY);
+      var currentUid = (window.getCurrentPlayerUID ? window.getCurrentPlayerUID() : (localStorage.getItem('fe_player_uid') || '1001')).trim();
+      var raw = null;
+      if (window.__cloudRoleDataPreloaded) {
+        raw = typeof window.__cloudRoleDataPreloaded === 'string' ? window.__cloudRoleDataPreloaded : JSON.stringify(window.__cloudRoleDataPreloaded);
+        console.log('[mock-save] 优先从预载云端数据还魂 UID=' + currentUid);
+      }
+      if (!raw) {
+        raw = nativeLocalStorage.getItem('fe_saved_role_v1_' + currentUid);
+      }
+      if (!raw) {
+        raw = nativeLocalStorage.getItem(SAVE_KEY);
+      }
       if (!raw) { restoreDone = true; return false; }
       var saved = deepRevive(JSON.parse(raw), 0);
       if (!saved || !(saved.boards instanceof Map)) { restoreDone = true; return false; }

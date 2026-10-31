@@ -169,6 +169,22 @@ export async function onRequestPost(context) {
     } catch (e) {}
   }
 
+  // 防倒退保护：如果云端已有高进度存档（例如 42 抽屉），而客户端上传的是初始/低进度存档（如第2天），拒绝降级覆盖！
+  let existingDay = 0;
+  if (globalThis.__memoryUsers && globalThis.__memoryUsers[uid] && globalThis.__memoryUsers[uid].day) {
+    existingDay = Number(globalThis.__memoryUsers[uid].day);
+  }
+  if (!existingDay && kv) {
+    try {
+      const exUser = await kv.get(`user_${uid}`);
+      if (exUser) existingDay = Number(JSON.parse(exUser).day || 0);
+    } catch (e) {}
+  }
+  if (!body.force && existingDay > 5 && dayVal < existingDay) {
+    console.warn(`[sync] 拒绝低进度覆盖高进度: uid=${uid}, incomingDay=${dayVal}, existingDay=${existingDay}`);
+    return jsonResp({ ok: true, uid, rejected: true, message: `已保护云端高进度 (云端第${existingDay}抽屉 vs 上传第${dayVal}抽屉)` });
+  }
+
   // 写入全局内存快照 (跨请求与跨接口共享，避免受 KV 配额限制而影响读取)
   globalThis.__memoryUsers = globalThis.__memoryUsers || {};
   globalThis.__memoryUsers[uid] = {

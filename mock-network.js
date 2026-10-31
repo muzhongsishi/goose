@@ -296,9 +296,17 @@
       try {
         if (window.d3 && window.d3.role && window.d3.role.boards instanceof Map && window.d3.role.boards.get(1) !== rb) {
           var d3Board = window.d3.role.boards.get(1);
-          if (d3Board && d3Board.cells instanceof Map) {
-            d3Board.cells.clear();
-            rb.cells.forEach(function (cv, ck) { d3Board.cells.set(ck, cv); });
+          if (d3Board) {
+            installBoardToJSON(d3Board);
+            if (d3Board.cells instanceof Map) {
+              d3Board.cells.clear();
+              rb.cells.forEach(function (cv, ck) { d3Board.cells.set(ck, cv); });
+            }
+            if (rb.channel instanceof Map) {
+              if (!(d3Board.channel instanceof Map)) d3Board.channel = new Map();
+              d3Board.channel.clear();
+              rb.channel.forEach(function (cv, ck) { d3Board.channel.set(ck, cv); });
+            }
           }
         }
       } catch (e) {}
@@ -3151,6 +3159,16 @@
       }
 
       b.cells.delete(sIdx);
+      try {
+        if (typeof window !== 'undefined' && window.o3) {
+          if (window.o3.cacheBoards && window.o3.cacheBoards.get(1) && window.o3.cacheBoards.get(1).cells) {
+            window.o3.cacheBoards.get(1).cells.delete(sIdx);
+          }
+          if (window.o3.Data && window.o3.Data.cells) {
+            window.o3.Data.cells.delete(sIdx);
+          }
+        }
+      } catch (e) {}
     }
     return { ok: true };
   }

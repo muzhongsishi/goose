@@ -3,8 +3,13 @@
 
 const ADMIN_SECRET = 'admin666';
 
-// 白名单保留账号：除此以外的历史测试账号全部自动清理与隐藏
-const RETAIN_UIDS = ['1003', '杰杰'];
+// 白名单保留账号：支持杰杰系列、1003等测试账号
+const RETAIN_UIDS = ['1003', '杰杰', '杰杰测试版', 'jiejie_test'];
+
+function isRetained(uid) {
+  if (!uid) return false;
+  return RETAIN_UIDS.includes(uid) || uid.startsWith('杰杰') || uid.startsWith('jiejie');
+}
 
 function jsonResp(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -38,7 +43,7 @@ export async function onRequestGet(context) {
     let indexList = rawIndex ? JSON.parse(rawIndex) : [];
     
     // 找出需要彻底删除的账号列表
-    const deleteList = indexList.filter(uid => !RETAIN_UIDS.includes(uid));
+    const deleteList = indexList.filter(uid => !isRetained(uid));
 
     if (deleteList.length > 0) {
       // 物理清理 KV 中的废弃账号数据
@@ -47,8 +52,8 @@ export async function onRequestGet(context) {
         try { await kv.delete(`role_${uid}`); } catch (e) {}
         try { await kv.delete(`mails_${uid}`); } catch (e) {}
       }
-      // 更新索引列表只保留 1003 和 杰杰
-      indexList = indexList.filter(uid => RETAIN_UIDS.includes(uid));
+      // 更新索引列表保留白名单账号
+      indexList = indexList.filter(uid => isRetained(uid));
       try {
         await kv.put('users_index', JSON.stringify(indexList));
       } catch (e) {
@@ -62,7 +67,7 @@ export async function onRequestGet(context) {
     }
 
     for (const uid of indexList) {
-      if (!RETAIN_UIDS.includes(uid)) continue;
+      if (!isRetained(uid)) continue;
       let userData = null;
       if (globalThis.__memoryUsers && globalThis.__memoryUsers[uid]) {
         userData = { ...globalThis.__memoryUsers[uid] };
@@ -72,13 +77,12 @@ export async function onRequestGet(context) {
         if (rawUser) userData = JSON.parse(rawUser);
       }
       if (userData) {
-        // 如果是正在测试的账号杰杰，且记录天数滞后，确保反映最新的第15天测试进度
-        if (uid === '杰杰' && (!userData.day || userData.day < 15)) {
+        if ((uid === '杰杰' || uid === '杰杰测试版') && (!userData.day || userData.day < 15)) {
           userData.day = 15;
         }
         users.push(userData);
       } else {
-        users.push({ uid, updatedAt: Date.now(), day: uid === '杰杰' ? 15 : 1, level: 1, coin: 0, diamond: 0, energy: 100 });
+        users.push({ uid, updatedAt: Date.now(), day: (uid === '杰杰' || uid === '杰杰测试版') ? 15 : 1, level: 1, coin: 0, diamond: 0, energy: 100 });
       }
     }
   }

@@ -155,6 +155,7 @@
       <button onclick="window.openMailWindow && window.openMailWindow()">✉️ 打开系统信箱</button>
       <button onclick="window.__gmRefillEnergy()">⚡️ 体力回满(+100)</button>
       <button onclick="window.__gmAddDiamond(1000)">💎 加钻石(+1000)</button>
+      <button onclick="window.__gmToggleCoupon()">🎟️ 加速券清零/补券 (切换钻石提速)</button>
       <button class="btn-warn" onclick="window.__gmResetProgress()">🔄 清除进度重开 (测新手引导)</button>
       <div id="gm-status">状态: 游戏中</div>
     </div>
@@ -382,6 +383,24 @@
       try { window.__mockSaveNow(); } catch (e) {}
       if (st) st.textContent = '🍳 已将 ' + count + ' 道正在烹饪的菜品置为完成！点击锅即可取菜';
       console.log('[GM] 已将 ' + count + ' 道菜品瞬间完成');
+    };
+
+    window.__gmToggleCoupon = function () {
+      var st = document.getElementById('gm-status');
+      var r = (window._user_mgr_ && window._user_mgr_.role) || (window.d3 && window.d3.role);
+      if (!r) { if (st) st.textContent = 'role 未就绪'; return; }
+      if ((r.speedUpCoupon || 0) > 0) {
+        var old = r.speedUpCoupon;
+        r.speedUpCoupon = 0;
+        try { window.__mockSaveNow(); } catch (e) {}
+        if (st) st.textContent = '🎟️ 已清空加速券 (原为' + old + '张)！厨具将直接显示【钻石提速】';
+        alert('已清空加速券！现在榨汁机等所有厨具将直接显示【钻石提速】！');
+      } else {
+        r.speedUpCoupon = 10;
+        try { window.__mockSaveNow(); } catch (e) {}
+        if (st) st.textContent = '🎟️ 已补充 10 张加速券！';
+        alert('已补充 10 张加速券！厨具烹饪时将优先消耗加速券。');
+      }
     };
 
     window.__gmResetProgress = function () {

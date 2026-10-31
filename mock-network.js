@@ -186,12 +186,9 @@
     }
     if (!uid) uid = '1001';
     var now = Date.now();
-    // 优化：采用 5 秒防抖，距上次同步最少 8 秒，大大降低空窗期，操作几步后快速安全上云
-    if (cloudSyncTimer) clearTimeout(cloudSyncTimer);
-    var waitMs = 5000;
-    if (now - lastCloudSyncTime < 8000) {
-      waitMs = Math.max(2500, 8000 - (now - lastCloudSyncTime));
-    }
+    // 恢复为 35 秒防抖（用户指定保留 35 秒间隔以节省配额）
+    if (cloudSyncTimer) return; // 已有等待队列，不重复调度
+    var waitMs = Math.max(2000, 35000 - (now - lastCloudSyncTime));
     cloudSyncTimer = setTimeout(function () {
       cloudSyncTimer = null;
       lastCloudSyncTime = Date.now();

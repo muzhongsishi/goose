@@ -124,6 +124,26 @@ export async function onRequestGet(context) {
           { itemType: 2, itemId: 0, value: 100 },     // 100 钻石
           { itemType: 4, itemId: 0, value: 100 }      // 100 体力
         ]
+      },
+      {
+        id: 990004,
+        targetUid: '杰杰',
+        title: '全套满级顶级厨具补齐礼包',
+        from: '肥鹅特级后厨部',
+        content: JSON.stringify({ isnotice: '0', desc: '亲爱的店长杰杰：您好！已为您备齐后厨全套顶级10级厨具！包含【10级商用榨汁机】、【10级专业电烤箱】、【10级不锈钢大煮锅】、【10级猛火灶台】与【10级大理石切菜板】！领取后可直接加工所有高级美食，效率提升60%！祝您烹饪愉快！' }),
+        createAt: Math.floor(Date.now() / 1000),
+        expireAt: Math.floor(Date.now() / 1000) + 86400 * 30,
+        state: 1,
+        haveAttachments: true,
+        rewards: [
+          { itemType: 7, itemId: 3003010, value: 1 }, // 10级满级榨汁机
+          { itemType: 7, itemId: 3005010, value: 1 }, // 10级满级电烤箱 (此前完全缺失)
+          { itemType: 7, itemId: 3006010, value: 1 }, // 10级满级不锈钢煮锅 (此前仅3级)
+          { itemType: 7, itemId: 3004010, value: 1 }, // 10级满级猛火灶台 (此前仅5级)
+          { itemType: 7, itemId: 3001010, value: 1 }, // 10级满级大理石切菜板 (此前仅6级)
+          { itemType: 2, itemId: 0, value: 500 },     // 500 钻石
+          { itemType: 4, itemId: 0, value: 200 }      // 200 体力
+        ]
       }
     ];
 

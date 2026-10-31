@@ -709,6 +709,7 @@
         if (name === 'Build') buildIndex();
         if (name === 'Shop') ensureRoleShop(window._user_mgr_ && window._user_mgr_.role); // 表迟到也补
         if (name === 'weekTaskActivity' && d && d.wt1) d.wt1.unlock = []; // 开放周任务测试
+        if (name === 'element') patchRuntimeElementConfigs();
         buildCookIndex(); // 幂等,三表齐才出结果
       }).catch(function (e) {
         console.error('[mock-build] 配置表加载失败 ' + name + ':', e && e.message);
@@ -2820,6 +2821,92 @@
     return { ok: true, cells: updatedCells };
   }
 
+  function getElementSellPrice(elemId) {
+    if (!elemId) return null;
+    var price = { coin: 0, energy: 0 };
+    // 1. 优先从客户端全局运行时的 config.Element 获取
+    try {
+      if (typeof window !== 'undefined' && window.config && window.config.Element && typeof window.config.Element.getById === 'function') {
+        var conf = window.config.Element.getById(elemId);
+        if (conf && conf.sellPrice) {
+          if (conf.sellPrice instanceof Map) {
+            conf.sellPrice.forEach(function (v, k) {
+              var lk = String(k).toLowerCase();
+              if (lk === 'coin' || lk === 'gold') price.coin += (Number(v) || 0);
+              else if (lk === 'energy') price.energy += (Number(v) || 0);
+            });
+          } else if (typeof conf.sellPrice === 'object') {
+            for (var k in conf.sellPrice) {
+              var lk = k.toLowerCase();
+              if (lk === 'coin' || lk === 'gold') price.coin += (Number(conf.sellPrice[k]) || 0);
+              else if (lk === 'energy') price.energy += (Number(conf.sellPrice[k]) || 0);
+            }
+          }
+          if (price.coin > 0 || price.energy > 0) return price;
+        }
+      }
+    } catch (e) {}
+
+    // 2. 从 TABLES.element 获取
+    try {
+      if (TABLES && TABLES.element) {
+        for (var sheet in TABLES.element) {
+          var item = TABLES.element[sheet] && TABLES.element[sheet][elemId];
+          if (item && item.sellPrice) {
+            for (var k in item.sellPrice) {
+              var lk = k.toLowerCase();
+              if (lk === 'coin' || lk === 'gold') price.coin += (Number(item.sellPrice[k]) || 0);
+              else if (lk === 'energy') price.energy += (Number(item.sellPrice[k]) || 0);
+            }
+            if (price.coin > 0 || price.energy > 0) return price;
+          }
+        }
+      }
+    } catch (e) {}
+
+    // 3. 兜底价格（50金币）
+    return { coin: 50, energy: 0 };
+  }
+
+  function patchRuntimeElementConfigs() {
+    try {
+      if (typeof window === 'undefined' || !window.config || !window.config.Element || !window.config.Element.map) return false;
+      var map = window.config.Element.map;
+      if (!map || map.size === 0) return false;
+      var patched = 0;
+      map.forEach(function (elem, id) {
+        var hasValidSell = false;
+        if (elem.sellPrice) {
+          if (elem.sellPrice instanceof Map && elem.sellPrice.size > 0) {
+            elem.sellPrice.forEach(function (v) { if (Number(v) > 0) hasValidSell = true; });
+          } else if (typeof elem.sellPrice === 'object' && Object.keys(elem.sellPrice).length > 0) {
+            for (var k in elem.sellPrice) { if (Number(elem.sellPrice[k]) > 0) hasValidSell = true; }
+          }
+        }
+        if (!hasValidSell && elem.type !== 'InitialBoard') {
+          var lvl = Math.max(1, Number(elem.level) || 1);
+          var coinVal = Math.max(20, lvl * 50);
+          if (elem.sellPrice instanceof Map) {
+            elem.sellPrice.set('Coin', coinVal);
+          } else {
+            var m = new Map();
+            m.set('Coin', coinVal);
+            elem.sellPrice = m;
+          }
+          elem.sellDoubleCheck = 1;
+          patched++;
+        }
+      });
+      if (patched > 0) {
+        console.log('[mock-element] 运行时成功注入 ' + patched + ' 个发射器/道具的出售价格(sellPrice+sellDoubleCheck)');
+      }
+      return true;
+    } catch (e) {
+      console.warn('[mock-element] 运行时配置热补丁异常:', e && e.message);
+      return false;
+    }
+  }
+
   function applyCellSell(role, params) {
     syncRuntimeBoardsToRole(role);
     var b = getBoardFor(role, params && params.boardId);
@@ -2828,7 +2915,23 @@
     var sIdx = Number(params && params.index);
     if (b.cells.has(sIdx)) {
       var cell = b.cells.get(sIdx);
-      console.log('[mock-cellsell] 出售格子: index=' + sIdx + ' elemId=' + (cell && cell.elementId));
+      var elemId = cell && Number(cell.elementId);
+      console.log('[mock-cellsell] 出售格子: index=' + sIdx + ' elemId=' + elemId);
+
+      // 结算出售收益
+      var sp = getElementSellPrice(elemId);
+      if (sp) {
+        if (sp.coin > 0) {
+          role.coin = (Number(role.coin) || 0) + sp.coin;
+          console.log('[mock-cellsell] 角色金币结算: +' + sp.coin + ' 当前总金币=' + role.coin);
+        }
+        if (sp.energy > 0) {
+          if (!role.energy) role.energy = { value: 100, max: 100 };
+          role.energy.value = (Number(role.energy.value) || 0) + sp.energy;
+          console.log('[mock-cellsell] 角色体力结算: +' + sp.energy);
+        }
+      }
+
       b.cells.delete(sIdx);
     }
     return { ok: true };
@@ -3625,10 +3728,11 @@
       // ===== B1/B2/B4:响应携带数据的 RPC(客户端消费 getData() 具体字段) =====
       var gcmd = ((t && t.cmd) || '').toLowerCase();
 
-      // 进入棋盘: 强制毫秒级同步运行时棋盘并保存，防止切街道回退
+      // 进入棋盘: 强制毫秒级同步运行时棋盘并保存，防止切街道回退，并注入发射器出售配置
       if (currentRole && gcmd === 'game_enterboard') {
         syncRuntimeBoardsToRole(currentRole);
         saveNow();
+        patchRuntimeElementConfigs();
         var bType = Number(t.params && t.params.boardType) || 1;
         var curBoard = currentRole.boards && currentRole.boards.get(bType);
         return Promise.resolve({
@@ -4035,7 +4139,8 @@
             };
           },
           rawData: {
-            code: csRes.ok ? 0 : 1
+            code: csRes.ok ? 0 : 1,
+            role: currentRole
           }
         }).then(function (r) { scheduleSave(); return r; });
       }
@@ -5268,6 +5373,13 @@
     // ===== 订单系统:加载原版订单配置 + 调试钩子 =====
     loadOrderConfig();
     loadGameTables();
+    // 定时巡检，确保客户端 config.Element 加载完成后立即热补丁发射器售价
+    var patchTimer = setInterval(function () {
+      if (patchRuntimeElementConfigs()) {
+        clearInterval(patchTimer);
+      }
+    }, 1000);
+    setTimeout(function () { clearInterval(patchTimer); }, 30000);
     window.__buildState = function () {
       var role = window._user_mgr_ && window._user_mgr_.role;
       if (!role || !role.build) return null;

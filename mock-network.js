@@ -96,6 +96,24 @@
   //此后运行时每次写棋盘都直接反映进 role,一次覆盖合成/移动/点击产出/卖出全部操作
   function findRuntimeBoards() {
     var found = [], seen = new Set();
+    // 优先直接绑定游戏活体单例 o3.Data 与 o3.GetBoardByType
+    try {
+      if (window.o3) {
+        if (typeof window.o3.GetBoardByType === 'function') {
+          var bMain = window.o3.GetBoardByType(1);
+          if (bMain && bMain.cells instanceof Map && bMain.cells.size >= 40 && !seen.has(bMain)) {
+            found.push(bMain);
+            seen.add(bMain);
+          }
+        }
+        var o3Data = window.o3.Data;
+        if (o3Data && o3Data.cells instanceof Map && o3Data.cells.size >= 40 && !seen.has(o3Data)) {
+          found.push(o3Data);
+          seen.add(o3Data);
+        }
+      }
+    } catch (e) {}
+
     function scan(o, depth) {
       if (!o || depth > 3 || seen.has(o) || found.length >= 4) return;
       seen.add(o);
@@ -114,7 +132,7 @@
         try { scan(o[keys[i]], depth + 1); } catch (e) {}
       }
     }
-    var roots = [window._board_renderer_, window._user_mgr_].filter(Boolean);
+    var roots = [window.o3, window._board_renderer_, window._user_mgr_].filter(Boolean);
     for (var ri = 0; ri < roots.length; ri++) scan(roots[ri], 0);
     return found;
   }
@@ -1417,25 +1435,45 @@
     if (!b || !b.bag) return { ok: false, error: '背包未就绪' };
     if (!(b.bag.items instanceof Map)) b.bag.items = new Map();
     var capacity = (Number(b.bag.size) || 8) + (Number(b.bag.extSize) || 0);
-    if (b.bag.items.size >= capacity) {
-      return { ok: false, error: '背包已满' };
-    }
+
     var idx = Number(params && params.index);
     var cell = b.cells && b.cells.get(idx);
-    if (cell) b.cells.delete(idx);
-
     var targetElem = Number(params && params.elementId) || (cell && cell.elementId) || 0;
+
+    // 清除棋盘上的格子
+    if (b.cells && idx >= 0) {
+      b.cells.delete(idx);
+    }
+
+    // 检查背包中是否已经由客户端预先放置了该项（elementId 匹配且已设为离盘 index: -1）
+    var alreadyExists = false;
+    var existingBagId = null;
+    b.bag.items.forEach(function (v, k) {
+      if (v && targetElem > 0 && v.elementId === targetElem && v.index === -1) {
+        alreadyExists = true;
+        existingBagId = k;
+      }
+    });
+
+    if (alreadyExists) {
+      console.log('[mock-bag] 客户端已预放入背包: elementId=' + targetElem + ' bagId=' + existingBagId);
+      return { ok: true, bagId: existingBagId, cell: b.bag.items.get(existingBagId) };
+    }
+
+    // 只有当背包中不存在且指定了合法 targetElem 时，服务端才补位新增，绝不重复生成导致一变二
     if (targetElem > 0) {
+      if (b.bag.items.size >= capacity) {
+        return { ok: false, error: '背包已满' };
+      }
       b.incrementId = (Number(b.incrementId) || 100) + 1;
       var newBagId = b.incrementId;
-      var bagCell = (cell && cell.elementId) ? Object.assign({}, cell, { elementId: targetElem, index: -1 }) : { elementId: targetElem, state: 0, index: -1, hp: 0 };
+      var bagCell = cell ? Object.assign({}, cell, { elementId: targetElem, index: -1 }) : { elementId: targetElem, state: 0, index: -1, hp: 0 };
       b.bag.items.set(newBagId, bagCell);
-      console.log('[mock-bag] 存入背包: elementId=' + bagCell.elementId + ' from idx=' + idx + ' -> bagId=' + newBagId);
+      console.log('[mock-bag] 服务端放入背包: elementId=' + targetElem + ' from idx=' + idx + ' -> bagId=' + newBagId);
       return { ok: true, bagId: newBagId, cell: bagCell };
-    } else {
-      console.warn('[mock-bag] 未解析到有效 elementId，避免塞入0值废对象，由客户端活体状态主导');
-      return { ok: true, bagId: 0, cell: null };
     }
+
+    return { ok: true, bagId: 0, cell: null };
   }
 
   function applyCellBagPut(role, params) {
@@ -1446,36 +1484,35 @@
     var bagId = Number(params && params.bagId);
     var toIndex = Number(params && params.toIndex);
 
-    var cell = b.bag.items.get(bagId);
-    var foundBagId = bagId;
-
-    // 智能容错：如果 key 对不上（例如客户端提前删了或自增 ID 偏移）
-    if (!cell && b.bag.items.size > 0) {
-      var it = b.bag.items.entries().next();
-      if (!it.done) {
-        foundBagId = it.value[0];
-        cell = it.value[1];
-        console.warn('[mock-bag] bagId=' + bagId + ' 未精确命中，自动匹配现有项 key=' + foundBagId);
+    var cell = null;
+    if (b.bag.items.has(bagId)) {
+      cell = b.bag.items.get(bagId);
+      b.bag.items.delete(bagId);
+    } else {
+      // 客户端在发出 RPC 前已在本地执行了 o3.Data.bag.items.delete 并将元素恢复至棋盘格！
+      // 严禁从背包盲目使用 entries().next() 抓取首个无关物品，必须直接获取目标格子的活体对象！
+      var existing = b.cells && b.cells.get(toIndex);
+      if (existing && existing.elementId > 0) {
+        cell = existing;
       }
     }
 
-    if (cell) {
-      b.bag.items.delete(foundBagId);
-    } else {
-      console.warn('[mock-bag] 背包已空或客户端提前取出，保持棋盘现存项');
-      var existing = b.cells && b.cells.get(toIndex);
-      cell = existing || { elementId: 0, state: 0, hp: 0, index: toIndex };
+    if (!cell) {
+      console.warn('[mock-bag] 取回目标项不存在且棋盘未就绪: bagId=' + bagId + ' toIndex=' + toIndex);
+      return { ok: true, cell: null };
     }
 
-    b.incrementId = (Number(b.incrementId) || 100) + 1;
-    var boardCell = Object.assign({}, cell, {
-      index: toIndex,
-      uUID: b.incrementId,
-      seed: Math.floor(Math.random() * 100000) + 1
-    });
-    b.cells.set(toIndex, boardCell);
-    console.log('[mock-bag] 取回棋盘成功: elementId=' + boardCell.elementId + ' bagId=' + bagId + ' -> toIndex=' + toIndex + ' uUID=' + boardCell.uUID);
-    return { ok: true, cell: boardCell };
+    cell.index = toIndex;
+    if (!cell.uUID) {
+      b.incrementId = (Number(b.incrementId) || 100) + 1;
+      cell.uUID = b.incrementId;
+    }
+    if (!cell.seed) {
+      cell.seed = Math.floor(Math.random() * 100000) + 1;
+    }
+    b.cells.set(toIndex, cell);
+    console.log('[mock-bag] 取回棋盘成功: elementId=' + cell.elementId + ' bagId=' + bagId + ' -> toIndex=' + toIndex + ' uUID=' + cell.uUID);
+    return { ok: true, cell: cell };
   }
 
   // ===== 阶段三：相册系统 (ImgBox) 与 周任务体系 (WeekTask) 核心业务 =====
@@ -2629,6 +2666,7 @@
   }
 
   function applyLauncherBagPut(role, params) {
+    syncRuntimeBoardsToRole(role);
     ensureRoleLauncherBag(role);
     var b = getBoardFor(role);
     var launcherId = Number(params && params.launcherId);
@@ -2648,6 +2686,7 @@
     if (!cell) {
       cell = { elementId: launcherId, state: 0, hp: 0, index: -1 };
     }
+    cell.elementId = launcherId;
     cell.index = -1;
     role.launcherBag.handbook.set(launcherId, true);
     role.launcherBag.items.set(launcherId, cell);
@@ -2656,6 +2695,7 @@
   }
 
   function applyLauncherBagTakeOut(role, params) {
+    syncRuntimeBoardsToRole(role);
     ensureRoleLauncherBag(role);
     var b = getBoardFor(role);
     var launcherId = Number(params && params.launcherId);
@@ -2665,6 +2705,7 @@
       cell = { elementId: launcherId, state: 0, hp: 0, index: toIndex };
     }
     role.launcherBag.items.delete(launcherId);
+    cell.elementId = launcherId;
     cell.index = toIndex;
     if (b && b.cells) {
       b.cells.set(toIndex, cell);
@@ -3595,8 +3636,7 @@
           error: lbtRes.error || '',
           getData: function () {
             return {
-              role: currentRole,
-              cells: lbtRes.cell ? [lbtRes.cell] : []
+              role: currentRole
             };
           },
           rawData: { code: lbtRes.ok ? 0 : 1 }

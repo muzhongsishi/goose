@@ -1271,16 +1271,50 @@
     return Math.ceil((Number(e.cookEffic) || 0) * (Number(r.duration) || 0) * 1000);
   }
   function cookFindRecipe(elementOrderId, elementsMap) {
+    if (!COOK_INDEX || !Array.isArray(COOK_INDEX.pool)) return null;
     var m = elementsMap instanceof Map ? elementsMap : new Map();
-    for (var i = 0; i < COOK_INDEX.pool.length; i++) {
-      var p = COOK_INDEX.pool[i];
-      if (p.elementOrderId !== elementOrderId) continue;
+    // 过滤出当前厨具的所有菜谱 (同构客户端 qp.findRecipesWith)
+    var cookwarePool = COOK_INDEX.pool.filter(function (p) {
+      return p.elementOrderId === elementOrderId;
+    });
+
+    // 严谨判定：当前厨具投入的所有食材，必须全部属于该菜谱 (同构客户端 qp.isAvailable，防止单料截胡多料配方)
+    function isRecipeAvailable(p) {
       var ok = true;
-      for (var k in (p.needElements || {})) {
-        if ((m.get(Number(k)) || 0) < Number(p.needElements[k])) { ok = false; break; }
-      }
-      if (ok) return p;
+      m.forEach(function (cnt, eid) {
+        if (cnt > 0 && !(p.needElements && p.needElements[String(eid)])) {
+          ok = false;
+        }
+      });
+      return ok;
     }
+
+    // 严谨判定：该菜谱所需的所有食材均已投足 (同构客户端 qp.isReady)
+    function isRecipeReady(p) {
+      if (!isRecipeAvailable(p)) return false;
+      var needs = p.needElements || {};
+      for (var k in needs) {
+        if ((m.get(Number(k)) || 0) < Number(needs[k])) return false;
+      }
+      return true;
+    }
+
+    // 获取所有完美就绪的候选菜谱
+    var readyList = cookwarePool.filter(isRecipeReady);
+    if (readyList.length > 0) {
+      // 核心排序：优先匹配消耗食材种类最多、消耗数量最多的高级菜谱 (彻底杜绝 1料煎蛋截胡 2料红酒炖肉)
+      readyList.sort(function (a, b) {
+        var aKeys = Object.keys(a.needElements || {}).length;
+        var bKeys = Object.keys(b.needElements || {}).length;
+        if (bKeys !== aKeys) return bKeys - aKeys;
+        var aTotal = 0, bTotal = 0;
+        for (var ak in (a.needElements || {})) aTotal += Number(a.needElements[ak]);
+        for (var bk in (b.needElements || {})) bTotal += Number(b.needElements[bk]);
+        return bTotal - aTotal;
+      });
+      return readyList[0];
+    }
+
     return null;
   }
   function ensureCellOrder(cell) {
@@ -1298,52 +1332,53 @@
     var now = Date.now();
     var recipe = null, i;
 
-    // 1. 若活体上已有客户端同步过来的 orderId
-    if (order.orderId > 0 && COOK_INDEX && COOK_INDEX.pool) {
+    // 1. 优先从客户端运行时棋盘 (o3.GetBoardByType(1)) 读取客户端本地乐观选定的权威 recipeId
+    try {
+      if (window.o3 && window.o3.GetBoardByType) {
+        var rb = window.o3.GetBoardByType(1) || window.o3.Data;
+        var rCell = rb && rb.cells && rb.cells.get(Number(params && params.index));
+        if (rCell && rCell.order && rCell.order.orderId > 0 && COOK_INDEX && COOK_INDEX.pool) {
+          for (i = 0; i < COOK_INDEX.pool.length; i++) {
+            if (COOK_INDEX.pool[i].id === rCell.order.orderId) {
+              recipe = COOK_INDEX.pool[i];
+              console.log('[mock-cook] 命中运行时棋盘权威菜谱 orderId=' + recipe.id + ' idx=' + params.index);
+              break;
+            }
+          }
+        }
+      }
+    } catch (e) {}
+
+    // 2. 若活体上已有客户端同步过来的 orderId
+    if (!recipe && order.orderId > 0 && COOK_INDEX && COOK_INDEX.pool) {
       for (i = 0; i < COOK_INDEX.pool.length; i++) {
         if (COOK_INDEX.pool[i].id === order.orderId) { recipe = COOK_INDEX.pool[i]; break; }
       }
     }
 
-    // 2. 检查运行时棋盘上的最新 orderId / 菜谱
-    if (!recipe) {
+    // 3. 检查运行时棋盘或活体的 order.elements，通过严谨算法 (支持多料优先匹配) 进行推理
+    var eo = COOK_INDEX && COOK_INDEX.elem && (COOK_INDEX.elem[cell.elementId] || {}).elementOrderId;
+    if (!recipe && eo < 0) {
+      // 优先用运行时格子的 elements
+      var runtimeElements = null;
       try {
         if (window.o3 && window.o3.GetBoardByType) {
-          var rb = window.o3.GetBoardByType(1) || window.o3.Data;
-          var rCell = rb && rb.cells && rb.cells.get(Number(params.index));
-          if (rCell && rCell.order && rCell.order.orderId > 0 && COOK_INDEX && COOK_INDEX.pool) {
-            for (i = 0; i < COOK_INDEX.pool.length; i++) {
-              if (COOK_INDEX.pool[i].id === rCell.order.orderId) { recipe = COOK_INDEX.pool[i]; break; }
-            }
-          }
-          if (!recipe && rCell && rCell.order && rCell.order.elements instanceof Map) {
-            var rEo = COOK_INDEX && COOK_INDEX.elem && (COOK_INDEX.elem[cell.elementId] || {}).elementOrderId;
-            if (rEo < 0) recipe = cookFindRecipe(rEo, rCell.order.elements);
+          var rrb = window.o3.GetBoardByType(1) || window.o3.Data;
+          var rrc = rrb && rrb.cells && rrb.cells.get(Number(params && params.index));
+          if (rrc && rrc.order && rrc.order.elements instanceof Map && rrc.order.elements.size > 0) {
+            runtimeElements = rrc.order.elements;
           }
         }
       } catch (e) {}
+      recipe = cookFindRecipe(eo, runtimeElements || order.elements);
     }
 
-    // 3. 防抖窗口内活体还是旧值→按当前 order.elements 推理
-    var eo = COOK_INDEX && COOK_INDEX.elem && (COOK_INDEX.elem[cell.elementId] || {}).elementOrderId;
-    if (!recipe && eo < 0) {
-      recipe = cookFindRecipe(eo, order.elements);
-    }
-
-    // 4. 极致强鲁棒保护: 榨汁机 (eo === -3) 开火保护
-    // 芒果放入榨汁机如果出现极端网络/时序未对齐，强保命中 Recipe 15 (热带芒果汁)
+    // 4. 特殊保底容错: 榨汁机 (eo === -3) 且投了芒果
     if (!recipe && eo === -3) {
       for (i = 0; i < (COOK_INDEX ? COOK_INDEX.pool.length : 0); i++) {
         if (COOK_INDEX.pool[i].id === 15) { recipe = COOK_INDEX.pool[i]; break; }
       }
       if (!order.elements.has(1004208)) order.elements.set(1004208, 1);
-    }
-
-    // 5. 其他厨具的保底就绪菜谱
-    if (!recipe && eo < 0 && COOK_INDEX && COOK_INDEX.pool) {
-      for (i = 0; i < COOK_INDEX.pool.length; i++) {
-        if (COOK_INDEX.pool[i].elementOrderId === eo) { recipe = COOK_INDEX.pool[i]; break; }
-      }
     }
 
     if (!recipe) {

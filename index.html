@@ -555,8 +555,21 @@
       var localRaw = localStorage.getItem('fe_saved_role_v1_' + currentUid) || localStorage.getItem('fe_saved_role_v1');
       var forcePull = localStorage.getItem('fe_force_pull_cloud_' + currentUid) === '1';
 
-      if (localRaw && !forcePull) {
-        // 遵循用户最高权威准则: 本地已有最新存档且非切换账号时, 100% 优先使用本地数据, 杜绝被旧快照覆盖!
+      var isLocalValid = false;
+      if (localRaw) {
+        try {
+          var parsed = JSON.parse(localRaw);
+          if (parsed && parsed.boards && parsed.boards.__m) {
+            var b1 = parsed.boards.__m.find(function (b) { return b[0] === 1; });
+            if (b1 && b1[1] && b1[1].cells && b1[1].cells.__m && b1[1].cells.__m.length >= 10) {
+              isLocalValid = true;
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (isLocalValid && !forcePull) {
+        // 遵循用户最高权威准则: 本地已有有效完整存档且非切换账号时, 100% 优先使用本地数据, 杜绝被旧快照覆盖!
         window.__cloudRoleDataPreloaded = null;
         __log('[boot] 本地已有最新权威存档 (UID: ' + currentUid + ')，优先装载本地最新数据');
         // 后台静默抓取云端新邮件(不阻塞、不覆盖角色数据)
@@ -570,8 +583,8 @@
         return Promise.resolve();
       }
 
-      // 仅当本地无存档或明确切换账号时, 从云端拉取全量最新存档
-      __log('[boot] 正在拉取 [' + currentUid + '] 云端全量存档 (首次登录或切换账号)...');
+      // 本地无存档、坏档(棋盘为空)或明确切换账号时, 无条件从云端拉取权威全量存档还魂
+      __log('[boot] 正在从云端拉取 [' + currentUid + '] 权威全量存档还魂...');
       return fetch('/api/sync?uid=' + encodeURIComponent(currentUid) + '&_t=' + Date.now(), { cache: 'no-store' })
         .then(function (res) { return res.json(); })
         .then(function (data) {

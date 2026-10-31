@@ -26,19 +26,6 @@
     if (!String.prototype.getDay) String.prototype.getDay = function () { var t = Date.parse(String(this)); return new Date(isNaN(t) ? 0 : t).getDay(); };
   } catch (e) {}
 
-  // Map 序列化免疫补丁: 客户端切换场景还原棋盘时执行 r.setValue(JSON.parse(JSON.stringify(e))),
-  // 原生 JSON.stringify(Map) 会丢失全部内容变成 {}，导致棋盘格子全毁或回退错位。
-  // 注入 toJSON 确保 Map 无损序列化为字典对象，供客户端 io/no 完美还原。
-  try {
-    if (!Map.prototype.toJSON) {
-      Map.prototype.toJSON = function () {
-        var obj = {};
-        this.forEach(function (v, k) { obj[String(k)] = v; });
-        return obj;
-      };
-    }
-  } catch (e) {}
-
   // 本文件先于 weapp-adapter 执行,此刻 window.localStorage 仍是原生对象;
   // 之后 adapter 会把它替换成自己的模块,存档必须始终走原生引用
   const nativeLocalStorage = window.localStorage;
@@ -233,15 +220,21 @@
       var rb = role.boards.get(1);
       if (!rb) return false;
 
-      if (!(rb.cells instanceof Map)) rb.cells = new Map();
-      rb.cells.clear();
-
+      // 绝不直接对 rb.cells 执行 clear()，防止与 liveSource 同引用时瞬间抹杀棋盘！
+      // 先拷贝至临时 Map，数量达标后再安全替换
+      var newCells = new Map();
       liveSource.cells.forEach(function (cVal, cKey) {
         var clean = extractCleanCellData(cVal, cKey);
         if (clean) {
-          rb.cells.set(Number(cKey), clean);
+          newCells.set(Number(cKey), clean);
         }
       });
+
+      if (newCells.size >= 10) {
+        rb.cells = newCells;
+      } else {
+        return false;
+      }
 
       // 同步奖品通道 channel
       if (liveSource.channel instanceof Map) {
@@ -535,6 +528,11 @@
       //reset 出来的全新空壳,此刻落盘会用空壳覆盖玩家进度(登录窗口竞态)——拒绝
       if (hasSavedRole() && !restoreDone) {
         console.warn('[mock-save] 拦截恢复前的落盘(防覆盖存档)');
+        return false;
+      }
+      var checkB1 = role.boards && role.boards.get && role.boards.get(1);
+      if (checkB1 && checkB1.cells instanceof Map && checkB1.cells.size > 0 && checkB1.cells.size < 10) {
+        console.warn('[mock-save] 拦截损坏/空棋盘落盘(cells数量异常: ' + checkB1.cells.size + ')，坚决保护玩家存档！');
         return false;
       }
       syncRuntimeBoardsToRole(role);   // 先回填运行时棋盘,再序列化
@@ -3227,7 +3225,17 @@
       var saved = deepRevive(JSON.parse(raw), 0);
       if (!saved || !(saved.boards instanceof Map)) { restoreDone = true; return false; }
       var b1 = saved.boards.get(1);
-      if (!b1 || !(b1.cells instanceof Map) || b1.cells.size === 0) { restoreDone = true; return false; }
+      if (!b1 || !(b1.cells instanceof Map) || b1.cells.size === 0) {
+        console.warn('[mock-save] 本地棋盘格式异常或为空(cells=0)，尝试从预载云端数据救回...');
+        if (window.__cloudRoleDataPreloaded) {
+          raw = typeof window.__cloudRoleDataPreloaded === 'string' ? window.__cloudRoleDataPreloaded : JSON.stringify(window.__cloudRoleDataPreloaded);
+          saved = deepRevive(JSON.parse(raw), 0);
+          b1 = saved && saved.boards && saved.boards.get(1);
+        }
+      }
+      if (!b1 || !(b1.cells instanceof Map) || b1.cells.size === 0) {
+        return false;
+      }
       for (var k in saved) {
         if (k === 'energy') continue; // energy 单独处理:恢复数值但兜底逻辑照跑
         try { role[k] = saved[k]; } catch (e) {}

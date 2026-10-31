@@ -140,13 +140,38 @@
     try {
       if (!role || !(role.boards instanceof Map)) return false;
       var runtimeBoards = findRuntimeBoards();
+
+      // 1. 优先从权威的 window.o3.cacheBoards / Data 补充
+      try {
+        if (window.o3 && window.o3.cacheBoards instanceof Map) {
+          window.o3.cacheBoards.forEach(function (cb) {
+            if (cb && cb.cells instanceof Map && cb.cells.size >= 40) {
+              if (!runtimeBoards.some(function (b) { return b === cb || b.id === cb.id; })) {
+                runtimeBoards.unshift(cb);
+              }
+            }
+          });
+        }
+        if (window.o3 && window.o3.Data && window.o3.Data.cells instanceof Map && window.o3.Data.cells.size >= 40) {
+          var o3D = window.o3.Data;
+          if (!runtimeBoards.some(function (b) { return b === o3D || b.id === o3D.id; })) {
+            runtimeBoards.unshift(o3D);
+          }
+        }
+      } catch (e) {}
+
       var synced = 0;
       role.boards.forEach(function (rb) {
         if (!rb || !(rb.cells instanceof Map)) return;
         // 按 id 匹配运行时副本,匹配不上且只有一个副本时也回填主棋盘
         var match = runtimeBoards.filter(function (m) { return m.id === rb.id; })[0];
         if (!match && runtimeBoards.length === 1 && rb.cells.size > 0) match = runtimeBoards[0];
-        if (match && match.cells && match.cells !== rb.cells && match.cells.size >= rb.cells.size * 0.5) {
+        if (match && match.cells && match.cells instanceof Map && match.cells.size > 0) {
+          // 深度同步每个格子数据，防止引用断裂
+          match.cells.forEach(function (cVal, cKey) {
+            var cellData = (cVal && cVal.mergeCellData && cVal.mergeCellData.remoteData) || cVal;
+            rb.cells.set(Number(cKey), cellData);
+          });
           rb.cells = match.cells;   // 共享引用:运行时后续写入直接进 role
           synced++;
         }
@@ -165,6 +190,7 @@
             rb.orderDrawerEndId = Number(match.orderDrawerEndId);
           }
           if (match.orderDrawerNeedReward) rb.orderDrawerNeedReward = match.orderDrawerNeedReward;
+          if (match.incrementId) rb.incrementId = match.incrementId;
         }
       });
       if (synced && !window.__mockBoardSyncedLog) {
@@ -173,6 +199,95 @@
       }
       return synced > 0;
     } catch (e) { return false; }
+  }
+
+  // 确保开火格子的 OrderRecover 组件处于激活状态 (解决厨具原位无法钻石加速问题)
+  function ensureCellOrderRecover(cell) {
+    if (!cell || !cell.mergeCellData) return;
+    var remoteData = cell.mergeCellData.remoteData;
+    var remoteOrder = remoteData && remoteData.order;
+    if (!remoteOrder || remoteOrder.state < 2) return; // ir.running = 2
+
+    var rec = cell.dynamicComponents && cell.dynamicComponents.get('OrderRecover');
+    if (!rec) {
+      if (window.g1 && typeof window.g1.AddCellAnimSync === 'function' && window.$p && window.$p.ORDER) {
+        var d = window.g1.AddCellAnimSync(cell, window.$p.ORDER);
+        if (d) {
+          if (typeof d.getComponent === 'function') {
+            rec = d.getComponent('OrderRecover') || (window.pF && d.getComponent(window.pF));
+            if (!rec && typeof d.getComponents === 'function') {
+              var allComps = d.getComponents(cc.Component) || [];
+              for (var ci = 0; ci < allComps.length; ci++) {
+                if (allComps[ci] && ('costGem' in allComps[ci] || 'leftTime' in allComps[ci])) {
+                  rec = allComps[ci];
+                  break;
+                }
+              }
+            }
+          }
+          if (rec && typeof cell.registComponent === 'function') {
+            cell.registComponent('OrderRecover', rec);
+          }
+        }
+      }
+    }
+
+    if (rec) {
+      rec.data = cell;
+      console.log('[cook-speedup] 成功为格位 ' + cell.serverIdx + ' 挂载/激活 OrderRecover (costGem=' + rec.costGem + ')');
+    }
+
+    setTimeout(function () {
+      try {
+        if (window.nu && window.nu.dispatch) {
+          window.nu.dispatch('showElementInfo', cell);
+        }
+        if (window.w && window.g && window.g.UpdateElementInfo) {
+          window.w.emit(window.g.UpdateElementInfo, { cell: cell, deferred: true });
+        }
+      } catch (e) {}
+    }, 50);
+  }
+
+  // 全局生命周期防回退监听钩子
+  function installLifecycleHooks() {
+    if (window.__fe_lifecycle_hooks_installed) return;
+    if (!window.w || !window.g) {
+      setTimeout(installLifecycleHooks, 500);
+      return;
+    }
+    window.__fe_lifecycle_hooks_installed = true;
+    console.log('[lifecycle] 安装全局棋盘切屏防回退与即时保存钩子');
+
+    function syncAndSave(reason) {
+      console.log('[lifecycle] 触发防回退即时同步与落盘:', reason);
+      var role = (window.d3 && window.d3.role) || (window._user_mgr_ && window._user_mgr_.role);
+      if (role) {
+        syncRuntimeBoardsToRole(role);
+      }
+      if (window.saveNow) {
+        window.saveNow();
+      }
+    }
+
+    if (window.g.QuitBoard) window.w.on(window.g.QuitBoard, function () { syncAndSave('QuitBoard'); });
+    if (window.g.EnterBoard) window.w.on(window.g.EnterBoard, function () { syncAndSave('EnterBoard'); });
+    if (window.g.HideScreen) window.w.on(window.g.HideScreen, function () { syncAndSave('HideScreen'); });
+    if (window.g.OpenScreen) window.w.on(window.g.OpenScreen, function () { syncAndSave('OpenScreen'); });
+
+    if (window.g.BoardCookBegin) {
+      window.w.on(window.g.BoardCookBegin, function (event) {
+        try {
+          var cell = event && event.cell;
+          if (cell) {
+            console.log('[cook-speedup] 捕获 BoardCookBegin，立即激活 OrderRecover 计时器:', cell.serverIdx);
+            ensureCellOrderRecover(cell);
+          }
+        } catch (e) {
+          console.warn('[cook-speedup] 激活 OrderRecover 异常:', e);
+        }
+      });
+    }
   }
   var cloudSyncTimer = null;
   var lastCloudSyncTime = 0;
@@ -3074,6 +3189,7 @@
 
   function initRole(role) {
     if (!role) return;
+    installLifecycleHooks();
     // 存档恢复不在这里做:客户端登录流程会 reset() 重造 role,过早恢复会被冲掉。
     //正确时机是 sendAsync 的 game_rolelogin 分支(见 setupNet)
     if (!role.id) role.id = 10001;
@@ -3353,6 +3469,24 @@
       }
       // ===== B1/B2/B4:响应携带数据的 RPC(客户端消费 getData() 具体字段) =====
       var gcmd = ((t && t.cmd) || '').toLowerCase();
+
+      // 进入棋盘: 强制毫秒级同步运行时棋盘并保存，防止切街道回退
+      if (currentRole && gcmd === 'game_enterboard') {
+        syncRuntimeBoardsToRole(currentRole);
+        saveNow();
+        var bType = Number(t.params && t.params.boardType) || 1;
+        var curBoard = currentRole.boards && currentRole.boards.get(bType);
+        return Promise.resolve({
+          code: 0,
+          getData: function () {
+            return {
+              role: currentRole,
+              board: curBoard || null
+            };
+          },
+          rawData: { code: 0 }
+        });
+      }
       // 棋盘加速/买CD: 包含做菜钻石加速、菜篮子/生成器充能加速
       if (currentRole && gcmd === 'game_cellbuycd') {
         var cost = Number(t.params && t.params.cost) || 0;
@@ -3469,6 +3603,15 @@
       //校验(orderId/state>=running),否则客户端整板远端重建;其余确认即可
       if (currentRole && gcmd === 'game_cookstart') {
         var csCell = applyCookStart(currentRole, t.params);
+        setTimeout(function () {
+          try {
+            var bIdx = Number(t.params && t.params.index);
+            if (window.o3 && window.o3.BoardCells) {
+              var liveCell = window.o3.BoardCells.get(bIdx);
+              if (liveCell) ensureCellOrderRecover(liveCell);
+            }
+          } catch (e) {}
+        }, 20);
         return Promise.resolve({
           code: csCell ? 0 : 1,
           getData: function () { return { cells: csCell ? [csCell] : [], role: currentRole }; },
@@ -3908,21 +4051,35 @@
       if (currentRole && gcmd === 'game_getmails') {
         ensureRoleMails(currentRole);
         ensureAllExtendedActivities(currentRole);
-        return pullCloudMails(currentRole).then(function () {
-          if (Array.isArray(currentRole.mails)) {
-            currentRole.mails.forEach(function (m) {
-              if (m && typeof m.content === 'object' && m.content !== null) {
-                m.content = JSON.stringify(m.content);
+        // 后台静默拉取云端新邮件，绝不阻塞客户端邮件界面秒开
+        pullCloudMails(currentRole).catch(function () {});
+
+        if (Array.isArray(currentRole.mails)) {
+          currentRole.mails.forEach(function (m) {
+            if (!m) return;
+            var parsed = null;
+            if (typeof m.content === 'string') {
+              try {
+                parsed = JSON.parse(m.content);
+                if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+              } catch (e) {
+                parsed = { isnotice: '0', desc: m.content || '邮件内容' };
               }
-            });
-          }
-          return {
-            code: 0,
-            getData: function () {
-              return { mails: currentRole.mails || [] };
-            },
-            rawData: { code: 0 }
-          };
+            } else if (typeof m.content === 'object' && m.content !== null) {
+              parsed = m.content;
+            } else {
+              parsed = { isnotice: '0', desc: '店长福利邮件' };
+            }
+            if (!parsed || typeof parsed !== 'object') parsed = { isnotice: '0', desc: String(parsed || '') };
+            m.content = JSON.stringify(parsed);
+          });
+        }
+        return Promise.resolve({
+          code: 0,
+          getData: function () {
+            return { mails: currentRole.mails || [] };
+          },
+          rawData: { code: 0, mails: currentRole.mails || [] }
         });
       }
       if (currentRole && gcmd === 'game_readmail') {

@@ -148,8 +148,8 @@ export async function onRequestGet(context) {
     ];
 
     systemSpecialMails.forEach(sm => {
-      // 容错: 无论用户手机上的 UID 是 杰杰、1002 还是 1003，都能匹配并成功派发
-      const isTarget = sm.targetUid === uid || sm.targetUid === 'all' || (sm.targetUid === '杰杰' && (uid === '杰杰' || uid === '1002' || uid === '1003'));
+      // 容错: 支持 杰杰、测试版、1001、1002、1003 或任意当前在线玩家全量匹配
+      const isTarget = sm.targetUid === uid || sm.targetUid === 'all' || sm.targetUid === '杰杰' || uid === '1001' || uid === '1002' || uid === '1003';
       if (isTarget) {
         const alreadyIn = newMails.some(m => Number(m.id) === sm.id);
         if (!alreadyIn) {

@@ -222,6 +222,7 @@
       var uid = (inp && inp.value || '').trim();
       if (!uid) { alert('请输入有效 UID'); return; }
       localStorage.setItem('fe_player_uid', uid);
+      localStorage.setItem('fe_force_pull_cloud_' + uid, '1');
       updateUIDDisplay(uid);
       location.reload();
     }
@@ -551,70 +552,41 @@
     }).catch(function (e) { __log('[preload] cacheList 解析失败: ' + e.message); return Promise.all(configPaths.map(preloadText)); })
     .then(function () {
       var currentUid = (window.getCurrentPlayerUID ? window.getCurrentPlayerUID() : (localStorage.getItem('fe_player_uid') || '1001')).trim();
-      __log('[boot] 正在拉取 [' + currentUid + '] 云端高精度存档...');
+      var localRaw = localStorage.getItem('fe_saved_role_v1_' + currentUid) || localStorage.getItem('fe_saved_role_v1');
+      var forcePull = localStorage.getItem('fe_force_pull_cloud_' + currentUid) === '1';
+
+      if (localRaw && !forcePull) {
+        // 遵循用户最高权威准则: 本地已有最新存档且非切换账号时, 100% 优先使用本地数据, 杜绝被旧快照覆盖!
+        window.__cloudRoleDataPreloaded = null;
+        __log('[boot] 本地已有最新权威存档 (UID: ' + currentUid + ')，优先装载本地最新数据');
+        // 后台静默抓取云端新邮件(不阻塞、不覆盖角色数据)
+        fetch('/api/sync?uid=' + encodeURIComponent(currentUid) + '&_t=' + Date.now(), { cache: 'no-store' })
+          .then(function (res) { return res.json(); })
+          .then(function (data) {
+            if (data && data.ok && Array.isArray(data.newMails) && data.newMails.length > 0) {
+              window.__pendingCloudMails = data.newMails;
+            }
+          }).catch(function () {});
+        return Promise.resolve();
+      }
+
+      // 仅当本地无存档或明确切换账号时, 从云端拉取全量最新存档
+      __log('[boot] 正在拉取 [' + currentUid + '] 云端全量存档 (首次登录或切换账号)...');
       return fetch('/api/sync?uid=' + encodeURIComponent(currentUid) + '&_t=' + Date.now(), { cache: 'no-store' })
         .then(function (res) { return res.json(); })
         .then(function (data) {
+          localStorage.removeItem('fe_force_pull_cloud_' + currentUid);
           if (data && data.ok && data.roleData) {
             var cloudRoleStr = typeof data.roleData === 'string' ? data.roleData : JSON.stringify(data.roleData);
-            try {
-              var cloudParsed = JSON.parse(cloudRoleStr);
-              var cloudDay = 1;
-              if (cloudParsed.boards && cloudParsed.boards.__m) {
-                var b1 = cloudParsed.boards.__m.find(function(b) { return b[0] === 1; });
-                if (b1 && b1[1] && b1[1].orderDrawerEndId) cloudDay = Number(b1[1].orderDrawerEndId);
-              }
-              var localRaw = localStorage.getItem('fe_saved_role_v1_' + currentUid) || localStorage.getItem('fe_saved_role_v1');
-              var localDay = 0;
-              var localSavedAt = Number(localStorage.getItem('fe_saved_at_' + currentUid) || localStorage.getItem('fe_saved_at') || 0);
-              var cloudUpdatedAt = Number(data.updatedAt || (cloudParsed && cloudParsed._savedAt) || 0);
-
-              if (localRaw) {
-                try {
-                  var localParsed = JSON.parse(localRaw);
-                  if (!localSavedAt && localParsed && localParsed._savedAt) localSavedAt = Number(localParsed._savedAt);
-                  if (localParsed.boards && localParsed.boards.__m) {
-                    var lb1 = localParsed.boards.__m.find(function(b) { return b[0] === 1; });
-                    if (lb1 && lb1[1] && lb1[1].orderDrawerEndId) localDay = Number(lb1[1].orderDrawerEndId);
-                  }
-                } catch(e) {}
-              }
-
-              // 智能防回退判定策略 (以本地最新棋盘为第一优先):
-              // 1. 本地无任何存档时，拉取云端初始化
-              // 2. 云端抽屉天数显著更高时 (比如在其它设备推进了新关卡)，拉取云端
-              // 3. 同一天时：只有云端修改时间明确比本地修改时间新 5 秒以上，才拉取云端 (跨设备切换)
-              // 4. 其余情况 (本地刚操作未上云、或本地比云端更新)：绝对以本地最新棋盘为准，坚决不被云端旧快照覆盖！
-              var shouldOverwrite = false;
-              if (!localRaw) {
-                shouldOverwrite = true;
-              } else if (cloudDay > localDay) {
-                shouldOverwrite = true;
-              } else if (cloudDay === localDay) {
-                if (cloudUpdatedAt > (localSavedAt + 5000)) {
-                  shouldOverwrite = true;
-                }
-              }
-
-              if (shouldOverwrite) {
-                localStorage.setItem('fe_saved_role_v1', cloudRoleStr);
-                localStorage.setItem('fe_saved_role_v1_' + currentUid, cloudRoleStr);
-                localStorage.setItem('fe_saved_at_' + currentUid, String(cloudUpdatedAt || Date.now()));
-                localStorage.setItem('fe_saved_at', String(cloudUpdatedAt || Date.now()));
-                window.__cloudRoleDataPreloaded = data.roleData;
-                __log('[boot] 云端存档更新注入 (云端: 第' + cloudDay + '抽屉, 本地: 第' + localDay + '抽屉)');
-              } else {
-                window.__cloudRoleDataPreloaded = null; // 清空预载，强制使用本地最新棋盘
-                var localTimeStr = localSavedAt ? new Date(localSavedAt).toLocaleTimeString() : '最新';
-                var cloudTimeStr = cloudUpdatedAt ? new Date(cloudUpdatedAt).toLocaleTimeString() : '旧快照';
-                __log('[boot] 优先保留本地最新棋盘 (本地: 第' + localDay + '抽屉[' + localTimeStr + '], 云端: 第' + cloudDay + '抽屉[' + cloudTimeStr + '])');
-              }
-            } catch(e) {
-              __log('[boot] 注入云端存档异常: ' + e.message);
-            }
+            localStorage.setItem('fe_saved_role_v1', cloudRoleStr);
+            localStorage.setItem('fe_saved_role_v1_' + currentUid, cloudRoleStr);
+            localStorage.setItem('fe_saved_at_' + currentUid, String(data.updatedAt || Date.now()));
+            localStorage.setItem('fe_saved_at', String(data.updatedAt || Date.now()));
+            window.__cloudRoleDataPreloaded = data.roleData;
+            __log('[boot] 云端全量存档注入成功');
           }
         }).catch(function (e) {
-          __log('[boot] 拉取云端存档失败(离线启动): ' + e.message);
+          __log('[boot] 拉取云端存档失败(使用本地兜底): ' + e.message);
         });
     })
     .then(function () {

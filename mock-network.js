@@ -2966,6 +2966,161 @@
     return { ok: true };
   }
 
+  // 发射器产出
+  function applyCellProduct(role, params) {
+    syncRuntimeBoardsToRole(role);
+    var b = getBoardFor(role, params && params.boardId);
+    if (!b || !(b.cells instanceof Map)) return { ok: false, error: '棋盘未就绪' };
+
+    var fromIdx = Number(params && params.index);
+    var items = (params && Array.isArray(params.cells)) ? params.cells : [];
+    var newCells = [];
+    var totalCost = 0;
+
+    items.forEach(function (it) {
+      if (!it || it.elementId == null || it.index == null) return;
+      var cIdx = Number(it.index);
+      var elemId = Number(it.elementId);
+      var cost = Number(it.cost) || 0;
+      totalCost += cost;
+
+      b.incrementId = (Number(b.incrementId) || 100) + 1;
+      var newCell = {
+        elementId: elemId,
+        index: cIdx,
+        state: 0,
+        hp: 0,
+        uUID: b.incrementId,
+        seed: Math.floor(Math.random() * 100000) + 1
+      };
+      b.cells.set(cIdx, newCell);
+      newCells.push(newCell);
+    });
+
+    if (totalCost > 0 && role.energy != null) {
+      role.energy = Math.max(0, Number(role.energy) - totalCost);
+    }
+    trackWeekTaskProgress(role, 0, newCells.length);
+    addPassPoints(role, newCells.length);
+
+    console.log('[mock-product] 产出元素: fromIdx=' + fromIdx + ' 产出数量=' + newCells.length + ' 消耗体力=' + totalCost);
+    return { ok: true, cells: newCells };
+  }
+
+  function applyMultipleCellProduct(role, params) {
+    if (params && Array.isArray(params.productInformation)) {
+      var allCells = [];
+      params.productInformation.forEach(function (info) {
+        var res = applyCellProduct(role, Object.assign({}, params, info));
+        if (res && res.cells) allCells.push.apply(allCells, res.cells);
+      });
+      return { ok: true, cells: allCells };
+    }
+    return applyCellProduct(role, params);
+  }
+
+  // 资源/元素收集 (金币、体力胶囊等)
+  function applyCellCollect(role, params) {
+    syncRuntimeBoardsToRole(role);
+    var b = getBoardFor(role, params && params.boardId);
+    if (!b || !(b.cells instanceof Map)) return { ok: false, error: '棋盘未就绪' };
+
+    var idx = Number(params && params.index);
+    var cell = b.cells.get(idx);
+    if (cell) {
+      b.cells.delete(idx);
+      console.log('[mock-collect] 收集格子元素: index=' + idx + ' elem=' + cell.elementId);
+    }
+    return { ok: true };
+  }
+
+  function applyMultipleCellCollect(role, params) {
+    if (params && Array.isArray(params.collectInformation)) {
+      params.collectInformation.forEach(function (info) {
+        applyCellCollect(role, Object.assign({}, params, info));
+      });
+      return { ok: true };
+    }
+    return applyCellCollect(role, params);
+  }
+
+  // 蜘蛛网/箱子开启
+  function applyCellOpen(role, params) {
+    syncRuntimeBoardsToRole(role);
+    var b = getBoardFor(role, params && params.boardId);
+    if (!b || !(b.cells instanceof Map)) return { ok: false, error: '棋盘未就绪' };
+
+    var idx = Number(params && params.index);
+    var cell = b.cells.get(idx);
+    if (cell) {
+      cell.state = 0; // 解除锁网状态
+      cell.openEnd = 0;
+      console.log('[mock-cellopen] 解锁/开启格子: index=' + idx + ' elem=' + cell.elementId);
+      return { ok: true, cell: cell };
+    }
+    return { ok: true, cell: null };
+  }
+
+  // 戳破气泡
+  function applyBreakBubble(role, params) {
+    syncRuntimeBoardsToRole(role);
+    var b = getBoardFor(role, params && params.boardId);
+    if (!b || !(b.cells instanceof Map)) return { ok: false, error: '棋盘未就绪' };
+
+    var idx = Number(params && params.index);
+    var cell = b.cells.get(idx);
+    if (cell) {
+      b.cells.delete(idx);
+      console.log('[mock-bubble] 戳破气泡: index=' + idx);
+    }
+    return { ok: true };
+  }
+
+  // 额外掉落/气泡喷出
+  function applyCellEmitExtra(role, params) {
+    syncRuntimeBoardsToRole(role);
+    var b = getBoardFor(role, params && params.boardId);
+    if (!b || !(b.cells instanceof Map)) return { ok: false, error: '棋盘未就绪' };
+
+    var emitCells = (params && Array.isArray(params.emitCells)) ? params.emitCells : [];
+    var newCells = [];
+    emitCells.forEach(function (ec) {
+      if (!ec || ec.elementId == null || ec.index == null) return;
+      var cIdx = Number(ec.index);
+      b.incrementId = (Number(b.incrementId) || 100) + 1;
+      var cell = Object.assign({}, ec, {
+        index: cIdx,
+        elementId: Number(ec.elementId),
+        uUID: b.incrementId,
+        seed: Math.floor(Math.random() * 100000) + 1
+      });
+      b.cells.set(cIdx, cell);
+      newCells.push(cell);
+    });
+    console.log('[mock-emitextra] 喷出副产物/气泡: 数量=' + newCells.length);
+    return { ok: true, cells: newCells };
+  }
+
+  // 撤销移动/操作
+  function applyCellUndo(role, params) {
+    syncRuntimeBoardsToRole(role);
+    var b = getBoardFor(role, params && params.boardId);
+    if (!b || !(b.cells instanceof Map)) return { ok: false, error: '棋盘未就绪' };
+
+    var fromIdx = Number(params && params.fromIndex);
+    var toIdx = Number(params && params.toIndex);
+    if (toIdx >= 0 && b.cells.has(toIdx)) {
+      var cell = b.cells.get(toIdx);
+      b.cells.delete(toIdx);
+      if (fromIdx >= 0) {
+        cell.index = fromIdx;
+        b.cells.set(fromIdx, cell);
+      }
+      console.log('[mock-undo] 撤销移动: from ' + toIdx + ' back to ' + fromIdx);
+    }
+    return { ok: true };
+  }
+
   function applyChannelBag(role, params) {
     var b = getBoardFor(role);
     if (!b || !b.bag) return { ok: false, error: '背包未就绪' };
@@ -3612,10 +3767,11 @@
             }
           } catch (e) {}
         }, 20);
+        var csList = csCell ? [csCell] : [];
         return Promise.resolve({
           code: csCell ? 0 : 1,
-          getData: function () { return { cells: csCell ? [csCell] : [], role: currentRole }; },
-          rawData: { code: csCell ? 0 : 1 }
+          getData: function () { return { cells: csList, role: currentRole }; },
+          rawData: { code: csCell ? 0 : 1, cells: csList, role: currentRole }
         }).then(function (r) { scheduleSave(); return r; });
       }
       if (currentRole && gcmd === 'game_cookputingredients') {
@@ -3624,31 +3780,41 @@
         return Promise.resolve({
           code: 0,
           getData: function () { return { cells: returnList, role: currentRole }; },
-          rawData: { code: 0 }
+          rawData: { code: 0, cells: returnList, role: currentRole }
         }).then(function (r) { scheduleSave(); return r; });
       }
       if (currentRole && gcmd === 'game_cooktakeingredient') {
         var ctCell = applyCookTake(currentRole, t.params);
+        var ctList = ctCell ? [ctCell] : [];
         return Promise.resolve({
           code: 0,
-          getData: function () { return { cells: ctCell ? [ctCell] : [], role: currentRole }; },
-          rawData: { code: 0 }
+          getData: function () { return { cells: ctList, role: currentRole }; },
+          rawData: { code: 0, cells: ctList, role: currentRole }
         }).then(function (r) { scheduleSave(); return r; });
       }
       if (currentRole && gcmd === 'game_cookcancel') {
         var ccCell = applyCookCancel(currentRole, t.params);
+        var ccList = ccCell ? [ccCell] : [];
         return Promise.resolve({
           code: 0,
-          getData: function () { return { cells: ccCell ? [ccCell] : [], role: currentRole }; },
-          rawData: { code: 0 }
+          getData: function () { return { cells: ccList, role: currentRole }; },
+          rawData: { code: 0, cells: ccList, role: currentRole }
         }).then(function (r) { scheduleSave(); return r; });
       }
       if (currentRole && (gcmd === 'game_cookcollect' || gcmd === 'game_cookcollectbatch')) {
         var clCells = applyCookCollect(currentRole, t.params);
+        var clList = clCells || [];
         return Promise.resolve({
           code: 0,
-          getData: function () { return { cells: clCells || [], role: currentRole }; },
-          rawData: { code: 0 }
+          getData: function () { return { cells: clList, role: currentRole }; },
+          rawData: { code: 0, cells: clList, role: currentRole }
+        }).then(function (r) { scheduleSave(); return r; });
+      }
+      if (currentRole && gcmd === 'game_completeelementorder') {
+        return Promise.resolve({
+          code: 0,
+          getData: function () { return { role: currentRole, cells: [] }; },
+          rawData: { code: 0, role: currentRole, cells: [] }
         }).then(function (r) { scheduleSave(); return r; });
       }
       // ===== 商店系统 RPC =====
@@ -3713,21 +3879,22 @@
           code: ctbRes.ok ? 0 : 1,
           error: ctbRes.error || '',
           getData: function () { return { role: currentRole }; },
-          rawData: { code: ctbRes.ok ? 0 : 1 }
+          rawData: { code: ctbRes.ok ? 0 : 1, role: currentRole }
         }).then(function (r) { scheduleSave(); return r; });
       }
       if (currentRole && gcmd === 'game_cellbagput') {
         var cbpRes = applyCellBagPut(currentRole, t.params);
+        var cbpCells = cbpRes.cell ? [cbpRes.cell] : [];
         return Promise.resolve({
           code: cbpRes.ok ? 0 : 1,
           error: cbpRes.error || '',
           getData: function () {
             return {
               role: currentRole,
-              cells: cbpRes.cell ? [cbpRes.cell] : []
+              cells: cbpCells
             };
           },
-          rawData: { code: cbpRes.ok ? 0 : 1 }
+          rawData: { code: cbpRes.ok ? 0 : 1, cells: cbpCells, role: currentRole }
         }).then(function (r) { scheduleSave(); return r; });
       }
       if (currentRole && gcmd === 'game_cellmove') {
@@ -3740,7 +3907,64 @@
               role: currentRole
             };
           },
-          rawData: { code: cmRes.ok ? 0 : 1 }
+          rawData: { code: cmRes.ok ? 0 : 1, role: currentRole }
+        }).then(function (r) { scheduleSave(); return r; });
+      }
+      if (currentRole && (gcmd === 'game_cellproduct' || gcmd === 'game_multiplecellproduct')) {
+        var cpRes = gcmd === 'game_multiplecellproduct' ? applyMultipleCellProduct(currentRole, t.params) : applyCellProduct(currentRole, t.params);
+        var cpNewCells = cpRes.cells || [];
+        return Promise.resolve({
+          code: cpRes.ok ? 0 : 1,
+          error: cpRes.error || '',
+          getData: function () {
+            return {
+              role: currentRole,
+              cells: cpNewCells
+            };
+          },
+          rawData: { code: cpRes.ok ? 0 : 1, cells: cpNewCells, role: currentRole }
+        }).then(function (r) { scheduleSave(); return r; });
+      }
+      if (currentRole && (gcmd === 'game_cellcollect' || gcmd === 'game_multiplecellcollect')) {
+        var ccRes = gcmd === 'game_multiplecellcollect' ? applyMultipleCellCollect(currentRole, t.params) : applyCellCollect(currentRole, t.params);
+        return Promise.resolve({
+          code: ccRes.ok ? 0 : 1,
+          getData: function () { return { role: currentRole }; },
+          rawData: { code: ccRes.ok ? 0 : 1, role: currentRole }
+        }).then(function (r) { scheduleSave(); return r; });
+      }
+      if (currentRole && gcmd === 'game_cellopen') {
+        var coRes = applyCellOpen(currentRole, t.params);
+        var coCells = coRes.cell ? [coRes.cell] : [];
+        return Promise.resolve({
+          code: coRes.ok ? 0 : 1,
+          getData: function () { return { role: currentRole, cells: coCells }; },
+          rawData: { code: coRes.ok ? 0 : 1, cells: coCells, role: currentRole }
+        }).then(function (r) { scheduleSave(); return r; });
+      }
+      if (currentRole && gcmd === 'game_breakbubble') {
+        var bbRes = applyBreakBubble(currentRole, t.params);
+        return Promise.resolve({
+          code: bbRes.ok ? 0 : 1,
+          getData: function () { return { role: currentRole }; },
+          rawData: { code: bbRes.ok ? 0 : 1, role: currentRole }
+        }).then(function (r) { scheduleSave(); return r; });
+      }
+      if (currentRole && gcmd === 'game_cellemitextra') {
+        var eeRes = applyCellEmitExtra(currentRole, t.params);
+        var eeCells = eeRes.cells || [];
+        return Promise.resolve({
+          code: eeRes.ok ? 0 : 1,
+          getData: function () { return { role: currentRole, cells: eeCells }; },
+          rawData: { code: eeRes.ok ? 0 : 1, cells: eeCells, role: currentRole }
+        }).then(function (r) { scheduleSave(); return r; });
+      }
+      if (currentRole && gcmd === 'game_cellundo') {
+        var cuRes = applyCellUndo(currentRole, t.params);
+        return Promise.resolve({
+          code: cuRes.ok ? 0 : 1,
+          getData: function () { return { role: currentRole }; },
+          rawData: { code: cuRes.ok ? 0 : 1, role: currentRole }
         }).then(function (r) { scheduleSave(); return r; });
       }
       if (currentRole && gcmd === 'game_cellinfo') {

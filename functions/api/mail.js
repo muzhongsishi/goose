@@ -46,7 +46,6 @@ export async function onRequestPost(context) {
     }
 
     const action = body.action || 'send'; // 'send' | 'ack'
-
     const kv = context.env && context.env.GAME_KV;
 
     // 1. 发送邮件动作
@@ -67,7 +66,7 @@ export async function onRequestPost(context) {
         expireAt: Math.floor(Date.now() / 1000) + 86400 * 30,
         state: 1, // 1 = 未读未领
         haveAttachments: Boolean(body.rewards && body.rewards.length),
-        rewards: body.rewards || [] // [{ itemType: 7, itemId: 3001003, value: 1 }]
+        rewards: body.rewards || []
       };
 
       // 写入内存邮件队列（保证无论 KV 是否限额，本次与同实例都能下发）
@@ -87,6 +86,14 @@ export async function onRequestPost(context) {
             let list = raw ? JSON.parse(raw) : [];
             list.unshift(mailItem);
             await kv.put(`mails_${targetUid}`, JSON.stringify(list));
+
+            // 顺便把该玩家加入玩家索引
+            let rawIndex = await kv.get('users_index');
+            let indexList = rawIndex ? JSON.parse(rawIndex) : [];
+            if (!indexList.includes(targetUid)) {
+              indexList.push(targetUid);
+              await kv.put('users_index', JSON.stringify(indexList));
+            }
           }
         } catch (kvErr) {
           console.warn('KV put quota exceeded in mail.js, saved to memory:', kvErr.message);
@@ -100,7 +107,7 @@ export async function onRequestPost(context) {
       });
     }
 
-    // 2. 客户端确认领取/已读邮件(从待下发队列移除)
+    // 2. 客户端确认领取/已读邮件(从待下发队列移除并记录已领)
     if (action === 'ack') {
       const uid = (body.uid || '').trim();
       const mailId = Number(body.mailId);
@@ -109,11 +116,28 @@ export async function onRequestPost(context) {
       }
 
       if (kv) {
-        let raw = await kv.get(`mails_${uid}`);
-        if (raw) {
-          let list = JSON.parse(raw).filter(m => Number(m.id) !== mailId);
-          await kv.put(`mails_${uid}`, JSON.stringify(list));
+        try {
+          // 清理个人队列
+          let raw = await kv.get(`mails_${uid}`);
+          if (raw) {
+            let list = JSON.parse(raw).filter(m => Number(m.id) !== mailId);
+            await kv.put(`mails_${uid}`, JSON.stringify(list));
+          }
+          // 记录已领集合(防止全员邮件重复下发)
+          let rawClaimed = await kv.get(`mails_claimed_${uid}`);
+          let claimedList = rawClaimed ? JSON.parse(rawClaimed) : [];
+          if (!claimedList.includes(mailId)) {
+            claimedList.push(mailId);
+            await kv.put(`mails_claimed_${uid}`, JSON.stringify(claimedList));
+          }
+        } catch (e) {
+          console.warn('ack kv error:', e.message);
         }
+      }
+
+      // 清理内存缓存
+      if (globalThis.__memoryMails && Array.isArray(globalThis.__memoryMails[uid])) {
+        globalThis.__memoryMails[uid] = globalThis.__memoryMails[uid].filter(m => Number(m.id) !== mailId);
       }
 
       return jsonResp({ ok: true, acknowledged: mailId });

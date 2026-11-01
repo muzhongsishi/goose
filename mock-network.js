@@ -514,13 +514,6 @@
         };
         role.mails.unshift(mailItem);
         added++;
-        if (uid) {
-          fetch('/api/mail', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'ack', uid: uid, mailId: m.id })
-          }).catch(function () {});
-        }
       }
     });
     if (added > 0) {
@@ -3674,7 +3667,7 @@
     //不在"恢复前窗口"碰 role
     if (!hasSavedRole() || restoreDone) ensureOrdersSeeded(role);
     if (role.boards) role.boards.forEach(installBoardToJSON);
-    pullCloudMails(role);
+    if (!hasSavedRole() || restoreDone) pullCloudMails(role);
     console.log('[mock-network] Role 数据已就绪, roleId:', role.id, 'MainBoard cells:', role.boards.get(1).cells.size, hasSavedRole() ? '(存档待 rolelogin 注入)' : '(全新开局)');
   }
 
@@ -4449,35 +4442,40 @@
       if (currentRole && gcmd === 'game_getmails') {
         ensureRoleMails(currentRole);
         ensureAllExtendedActivities(currentRole);
-        // 后台静默拉取云端新邮件，绝不阻塞客户端邮件界面秒开
-        pullCloudMails(currentRole).catch(function () {});
+        var pullPromise = Promise.race([
+          pullCloudMails(currentRole),
+          new Promise(function (resolve) { setTimeout(resolve, 600); })
+        ]).catch(function () {});
 
-        if (Array.isArray(currentRole.mails)) {
-          currentRole.mails.forEach(function (m) {
-            if (!m) return;
-            var parsed = null;
-            if (typeof m.content === 'string') {
-              try {
-                parsed = JSON.parse(m.content);
-                if (typeof parsed === 'string') parsed = JSON.parse(parsed);
-              } catch (e) {
-                parsed = { isnotice: '0', desc: m.content || '邮件内容' };
+        return pullPromise.then(function () {
+          ensureRoleMails(currentRole);
+          if (Array.isArray(currentRole.mails)) {
+            currentRole.mails.forEach(function (m) {
+              if (!m) return;
+              var parsed = null;
+              if (typeof m.content === 'string') {
+                try {
+                  parsed = JSON.parse(m.content);
+                  if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+                } catch (e) {
+                  parsed = { isnotice: '0', desc: m.content || '邮件内容' };
+                }
+              } else if (typeof m.content === 'object' && m.content !== null) {
+                parsed = m.content;
+              } else {
+                parsed = { isnotice: '0', desc: '店长福利邮件' };
               }
-            } else if (typeof m.content === 'object' && m.content !== null) {
-              parsed = m.content;
-            } else {
-              parsed = { isnotice: '0', desc: '店长福利邮件' };
-            }
-            if (!parsed || typeof parsed !== 'object') parsed = { isnotice: '0', desc: String(parsed || '') };
-            m.content = JSON.stringify(parsed);
-          });
-        }
-        return Promise.resolve({
-          code: 0,
-          getData: function () {
-            return { mails: currentRole.mails || [] };
-          },
-          rawData: { code: 0, mails: currentRole.mails || [] }
+              if (!parsed || typeof parsed !== 'object') parsed = { isnotice: '0', desc: String(parsed || '') };
+              m.content = JSON.stringify(parsed);
+            });
+          }
+          return {
+            code: 0,
+            getData: function () {
+              return { mails: currentRole.mails || [] };
+            },
+            rawData: { code: 0, mails: currentRole.mails || [] }
+          };
         });
       }
       if (currentRole && gcmd === 'game_readmail') {
@@ -4521,6 +4519,14 @@
           currentRole.mailNewCount = Math.max(0, (currentRole.mailNewCount || 0) - 1);
           console.log('[mock-mail] 成功领取邮件 ' + mId + ' 附件奖励并注入待领气泡:', mailRewards);
           scheduleSave();
+          var curUid = (window.getCurrentPlayerUID ? window.getCurrentPlayerUID() : (localStorage.getItem('fe_player_uid') || '1001')).trim();
+          if (curUid && mId) {
+            fetch('/api/mail', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'ack', uid: curUid, mailId: mId })
+            }).catch(function () {});
+          }
         }
         return Promise.resolve({
           code: 0,
@@ -5407,6 +5413,7 @@
         ensureRoleBoxes(currentRole);
         ensureRoleWeekTask(currentRole);
         ensureRoleMails(currentRole);
+        pullCloudMails(currentRole).catch(function () {});
       }
 
       return Promise.resolve({

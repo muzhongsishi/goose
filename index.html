@@ -589,14 +589,20 @@
         .then(function (res) { return res.json(); })
         .then(function (data) {
           localStorage.removeItem('fe_force_pull_cloud_' + currentUid);
-          if (data && data.ok && data.roleData) {
-            var cloudRoleStr = typeof data.roleData === 'string' ? data.roleData : JSON.stringify(data.roleData);
-            localStorage.setItem('fe_saved_role_v1', cloudRoleStr);
-            localStorage.setItem('fe_saved_role_v1_' + currentUid, cloudRoleStr);
-            localStorage.setItem('fe_saved_at_' + currentUid, String(data.updatedAt || Date.now()));
-            localStorage.setItem('fe_saved_at', String(data.updatedAt || Date.now()));
-            window.__cloudRoleDataPreloaded = data.roleData;
-            __log('[boot] 云端全量存档注入成功');
+          if (data && data.ok) {
+            if (Array.isArray(data.newMails) && data.newMails.length > 0) {
+              window.__pendingCloudMails = data.newMails;
+              __log('[boot] 云端预加载新邮件: ' + data.newMails.length + ' 封');
+            }
+            if (data.roleData) {
+              var cloudRoleStr = typeof data.roleData === 'string' ? data.roleData : JSON.stringify(data.roleData);
+              localStorage.setItem('fe_saved_role_v1', cloudRoleStr);
+              localStorage.setItem('fe_saved_role_v1_' + currentUid, cloudRoleStr);
+              localStorage.setItem('fe_saved_at_' + currentUid, String(data.updatedAt || Date.now()));
+              localStorage.setItem('fe_saved_at', String(data.updatedAt || Date.now()));
+              window.__cloudRoleDataPreloaded = data.roleData;
+              __log('[boot] 云端全量存档注入成功');
+            }
           }
         }).catch(function (e) {
           __log('[boot] 拉取云端存档失败(使用本地兜底): ' + e.message);

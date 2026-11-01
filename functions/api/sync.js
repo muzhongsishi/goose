@@ -37,6 +37,7 @@ export async function onRequestGet(context) {
   let roleData = null;
   let newMails = [];
   let updatedAt = 0;
+  let claimedSet = new Set();
 
   try {
     if (kv) {
@@ -47,8 +48,12 @@ export async function onRequestGet(context) {
       }
       const rawUserMails = await kv.get(`mails_${uid}`);
       const rawGlobalMails = await kv.get(`mails_global`);
+      const rawClaimed = await kv.get(`mails_claimed_${uid}`);
+      if (rawClaimed) {
+        try { JSON.parse(rawClaimed).forEach(id => claimedSet.add(Number(id))); } catch(e) {}
+      }
       const userMails = rawUserMails ? JSON.parse(rawUserMails) : [];
-      const globalMails = rawGlobalMails ? JSON.parse(rawGlobalMails) : [];
+      const globalMails = (rawGlobalMails ? JSON.parse(rawGlobalMails) : []).filter(m => !claimedSet.has(Number(m.id)));
       newMails = [...userMails, ...globalMails];
     } else {
       roleData = memoryStore.roles[uid] || null;
@@ -133,10 +138,12 @@ export async function onRequestGet(context) {
     // 合并全局内存邮件缓存（跨 API 兜底）
     if (globalThis.__memoryMails) {
       if (Array.isArray(globalThis.__memoryMails[uid])) {
-        newMails.unshift(...globalThis.__memoryMails[uid]);
+        const uncalimedUserMem = globalThis.__memoryMails[uid].filter(m => !claimedSet.has(Number(m.id)));
+        newMails.unshift(...uncalimedUserMem);
       }
       if (Array.isArray(globalThis.__memoryMails['all'])) {
-        newMails.unshift(...globalThis.__memoryMails['all']);
+        const uncalimedGlobalMem = globalThis.__memoryMails['all'].filter(m => !claimedSet.has(Number(m.id)));
+        newMails.unshift(...uncalimedGlobalMem);
       }
     }
 
@@ -233,6 +240,7 @@ export async function onRequestGet(context) {
     ];
 
     systemSpecialMails.forEach(sm => {
+      if (claimedSet.has(Number(sm.id))) return;
       // 容错: 支持 杰杰、测试版、1001、1002、1003 或任意当前在线玩家全量匹配
       const isTarget = sm.targetUid === uid || sm.targetUid === 'all' || sm.targetUid === '杰杰' || uid === '1001' || uid === '1002' || uid === '1003';
       if (isTarget) {
@@ -241,6 +249,16 @@ export async function onRequestGet(context) {
           newMails.unshift(sm);
         }
       }
+    });
+
+    // 严格按 ID 去重
+    const seenMailIds = new Set();
+    newMails = newMails.filter(m => {
+      if (!m || !m.id) return false;
+      const mid = Number(m.id);
+      if (seenMailIds.has(mid)) return false;
+      seenMailIds.add(mid);
+      return true;
     });
 
   } catch (err) {

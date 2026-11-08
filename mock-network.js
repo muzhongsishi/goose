@@ -155,12 +155,26 @@
       var elemMap = new Map();
       if (raw.order.elements instanceof Map) {
         raw.order.elements.forEach(function (v, k) { elemMap.set(k, v); });
+      } else if (raw.order.elements && typeof raw.order.elements === 'object') {
+        Object.entries(raw.order.elements).forEach(function (kv) { elemMap.set(kv[0], kv[1]); });
       }
+      var cleanOrdId = Number(raw.order.orderId) || 0;
+      var cleanEndTime = Number(raw.order.endTime) || 0;
+      var cleanStartTime = Number(raw.order.startTime) || 0;
+      var cleanState = Number(raw.order.state) || 0;
+
+      // 防呆净化：无具体订单且无食材的厨具，禁止残留非零倒计时与工作态
+      if (String(cleanCell.elementId).startsWith('300') && cleanOrdId === 0 && elemMap.size === 0) {
+        cleanEndTime = 0;
+        cleanStartTime = 0;
+        cleanState = 0;
+      }
+
       cleanCell.order = {
-        orderId: Number(raw.order.orderId) || 0,
-        state: Number(raw.order.state) || 0,
-        startTime: Number(raw.order.startTime) || 0,
-        endTime: Number(raw.order.endTime) || 0,
+        orderId: cleanOrdId,
+        state: cleanState,
+        startTime: cleanStartTime,
+        endTime: cleanEndTime,
         elements: elemMap
       };
     }
@@ -3435,6 +3449,26 @@
             if (!v || !v.elementId) b1.bag.items.delete(k);
           });
         }
+      }
+      if (b1 && b1.cells instanceof Map) {
+        b1.cells.forEach(function (c) {
+          if (c && String(c.elementId).startsWith('300')) {
+            var ord = c.order;
+            if (ord) {
+              var elemCount = 0;
+              if (ord.elements instanceof Map) elemCount = ord.elements.size;
+              else if (Array.isArray(ord.elements)) elemCount = ord.elements.length;
+              else if (ord.elements && typeof ord.elements === 'object') elemCount = Object.keys(ord.elements).length;
+              if ((!ord.orderId || ord.orderId === 0) && elemCount === 0 && ord.endTime > 0) {
+                console.log('[mock-save] 自动净化僵尸厨具状态: cell=' + c.index + ' elem=' + c.elementId);
+                ord.endTime = 0;
+                ord.startTime = 0;
+                ord.state = 0;
+                ord.orderId = 0;
+              }
+            }
+          }
+        });
       }
       if (role.boards) role.boards.forEach(installBoardToJSON);
       console.log('[mock-save] 已恢复本地存档: cells=' + b1.cells.size + ', id=' + saved.id);

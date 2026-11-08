@@ -261,6 +261,43 @@ export async function onRequestGet(context) {
       return true;
     });
 
+    // 自动净化厨具僵尸计时：无具体订单且无食材的厨具，禁止残留 endTime
+    if (roleData) {
+      try {
+        const pr = typeof roleData === 'string' ? JSON.parse(roleData) : roleData;
+        if (pr && pr.boards && pr.boards.__m) {
+          const b1Pair = pr.boards.__m.find(b => b[0] === 1);
+          if (b1Pair && b1Pair[1] && b1Pair[1].cells && b1Pair[1].cells.__m) {
+            let modified = false;
+            b1Pair[1].cells.__m.forEach(p => {
+              const c = p[1];
+              if (c && String(c.elementId).startsWith('300')) {
+                const ord = c.order;
+                if (ord) {
+                  let elemCount = 0;
+                  if (ord.elements) {
+                    if (ord.elements.__m) elemCount = ord.elements.__m.length;
+                    else if (Array.isArray(ord.elements)) elemCount = ord.elements.length;
+                    else if (typeof ord.elements === 'object') elemCount = Object.keys(ord.elements).length;
+                  }
+                  if ((!ord.orderId || ord.orderId === 0) && elemCount === 0 && ord.endTime > 0) {
+                    ord.endTime = 0;
+                    ord.startTime = 0;
+                    ord.state = 0;
+                    ord.orderId = 0;
+                    modified = true;
+                  }
+                }
+              }
+            });
+            if (modified) {
+              roleData = pr;
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
   } catch (err) {
     return jsonResp({ ok: false, error: err.message }, 500);
   }
@@ -284,10 +321,45 @@ export async function onRequestPost(context) {
   }
 
   const uid = (body.uid || '').trim();
-  const roleData = body.roleData;
+  let roleData = body.roleData;
   if (!uid || !roleData) {
     return jsonResp({ ok: false, error: 'uid and roleData are required' }, 400);
   }
+
+  // 防呆净化落盘厨具数据：无具体订单且无食材的厨具，禁止残留 endTime
+  try {
+    const pr = typeof roleData === 'string' ? JSON.parse(roleData) : roleData;
+    if (pr && pr.boards && pr.boards.__m) {
+      const b1Pair = pr.boards.__m.find(b => b[0] === 1);
+      if (b1Pair && b1Pair[1] && b1Pair[1].cells && b1Pair[1].cells.__m) {
+        let modified = false;
+        b1Pair[1].cells.__m.forEach(p => {
+          const c = p[1];
+          if (c && String(c.elementId).startsWith('300')) {
+            const ord = c.order;
+            if (ord) {
+              let elemCount = 0;
+              if (ord.elements) {
+                if (ord.elements.__m) elemCount = ord.elements.__m.length;
+                else if (Array.isArray(ord.elements)) elemCount = ord.elements.length;
+                else if (typeof ord.elements === 'object') elemCount = Object.keys(ord.elements).length;
+              }
+              if ((!ord.orderId || ord.orderId === 0) && elemCount === 0 && ord.endTime > 0) {
+                ord.endTime = 0;
+                ord.startTime = 0;
+                ord.state = 0;
+                ord.orderId = 0;
+                modified = true;
+              }
+            }
+          }
+        });
+        if (modified) {
+          roleData = typeof body.roleData === 'string' ? JSON.stringify(pr) : pr;
+        }
+      }
+    }
+  } catch (e) {}
 
   const kv = context.env && context.env.GAME_KV;
   const now = Date.now();

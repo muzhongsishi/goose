@@ -3129,10 +3129,11 @@
           elem.sellDoubleCheck = 1;
           patched++;
         }
-        // 确保发射器的充能配置完整：如果具备生产属性但缺少 CDCost，补齐合理的 CDCost
-        var isProducer = (elem.elementIdWeight && ((elem.elementIdWeight instanceof Map && elem.elementIdWeight.size > 0) || (typeof elem.elementIdWeight === 'object' && Object.keys(elem.elementIdWeight).length > 0))) ||
+        // 确保发射器的充能配置完整：如果具备生产属性但缺少 CDCost，补齐合理的 CDCost（排除厨具，厨具非发射器）
+        var isCookware = (elem.elementOrderId !== undefined && Number(elem.elementOrderId) < 0);
+        var isProducer = !isCookware && (((elem.elementIdWeight && ((elem.elementIdWeight instanceof Map && elem.elementIdWeight.size > 0) || (typeof elem.elementIdWeight === 'object' && Object.keys(elem.elementIdWeight).length > 0))) ||
                          (elem.elementIdList && elem.elementIdList.length > 0) ||
-                         (elem.elementCDStorage > 0);
+                         (elem.elementCDStorage > 0)));
         if (isProducer) {
           if (!elem.elementCDCost || elem.elementCDCost <= 0) {
             var plvl = Math.max(1, Number(elem.level) || 1);
@@ -6618,7 +6619,7 @@
                 this.label_desc.enableWrapText = true;
               }
               var targetCell = e || this.cell;
-              if (targetCell && targetCell.mergeCellData) {
+              if (targetCell && targetCell.mergeCellData && !targetCell.isCookWare) {
                 var mcd = targetCell.mergeCellData;
                 var conf = mcd.config;
                 var rec = targetCell.board ? targetCell.board.getCellRecovery(targetCell.serverIdx, 1) : null;
@@ -6644,7 +6645,7 @@
           var origCheckNeedShow = elInfoCls.prototype.checkNeedShowCreator;
           elInfoCls.prototype.checkNeedShowCreator = function (cell) {
             var ok = origCheckNeedShow ? origCheckNeedShow.apply(this, arguments) : false;
-            if (!ok && cell && cell.mergeCellData) {
+            if (!ok && cell && cell.mergeCellData && !cell.isCookWare) {
               var mcd = cell.mergeCellData;
               var conf = mcd.config;
               var rec = cell.board ? cell.board.getCellRecovery(cell.serverIdx, 1) : null;
@@ -6659,9 +6660,10 @@
           // (3) showElementInfoCreator 兜底保证钻石充能价格与标签显示
           var origShowCreator = elInfoCls.prototype.showElementInfoCreator;
           elInfoCls.prototype.showElementInfoCreator = function (cell) {
+            if (cell && cell.isCookWare) return;
             var res = origShowCreator ? origShowCreator.apply(this, arguments) : undefined;
             try {
-              if (cell && cell.mergeCellData) {
+              if (cell && cell.mergeCellData && !cell.isCookWare) {
                 var mcd = cell.mergeCellData;
                 var conf = mcd.config;
                 var rec = cell.board ? cell.board.getCellRecovery(cell.serverIdx, 1) : null;
@@ -6707,14 +6709,18 @@
                 if (!rec && mcd.getRecovery) rec = mcd.getRecovery(1);
                 var dyn = cell.dynamicComponents ? cell.dynamicComponents.get("ManuCreatorRecover") : null;
                 var leftTime = dyn ? dyn.createLeftTime : 0;
-                if (conf && conf.elementCDStorage > 0 && rec) {
+                if (!cell.isCookWare && conf && conf.elementCDStorage > 0 && rec) {
                   if (rec.state === 1 || rec.value === 0 || leftTime > 0) {
                     isCreatorInCd = true;
                   }
                 }
-                // 厨具如果在烹饪中也避让出售
-                if (cell.isCookWare && mcd.remoteData && mcd.remoteData.order && mcd.remoteData.order.state === 2) {
-                  isCreatorInCd = true;
+                // 厨具如果正在烹饪中才避让出售 (注意：烹饪中或有食材时避让，空闲无食材可自由出售！)
+                if (cell.isCookWare && mcd.remoteData && mcd.remoteData.order) {
+                  var o = mcd.remoteData.order;
+                  var elemCount = o.elements ? (o.elements.size || (Array.isArray(o.elements) ? o.elements.length : 0)) : 0;
+                  if (o.orderId !== 0 || o.state === 2 || elemCount > 0 || o.endTime > 0) {
+                    isCreatorInCd = true;
+                  }
                 }
               }
             } catch (e) {}
@@ -6735,7 +6741,7 @@
           manuCls.prototype.onClickElement = function (cell, t, i) {
             var res = origClickElem.apply(this, arguments);
             try {
-              if (cell && cell.mergeCellData) {
+              if (cell && cell.mergeCellData && !cell.isCookWare) {
                 var mcd = cell.mergeCellData;
                 var conf = mcd.config;
                 var rec = cell.board ? cell.board.getCellRecovery(cell.serverIdx, 1) : null;
